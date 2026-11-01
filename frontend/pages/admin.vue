@@ -5,6 +5,8 @@ const config = useRuntimeConfig()
 const token = ref('')
 const password = ref('')
 const activeTab = ref<'orders' | 'products'>('orders')
+const searchQuery = ref('')
+const statusFilter = ref('all')
 const orders = ref<any[]>([])
 const products = ref<any[]>([])
 const busy = ref(false)
@@ -22,10 +24,7 @@ async function loadDashboard() {
   error.value = ''
   busy.value = true
   try {
-    const [orderRows, productRows] = await Promise.all([
-      api('/admin/orders'),
-      api('/admin/products'),
-    ])
+    const [orderRows, productRows] = await Promise.all([api('/admin/orders'), api('/admin/products')])
     orders.value = orderRows as any[]
     products.value = productRows as any[]
   } catch (cause: any) {
@@ -99,22 +98,50 @@ const money = (value: number) => new Intl.NumberFormat('fr-FR').format(Number(va
 const statuses: Record<string, string> = {
   processing: 'À traiter', preparing: 'En préparation', shipped: 'Expédiée', delivered: 'Livrée',
 }
+const statusLabel = (status: string) => statuses[status] || (status === 'awaiting_payment' ? 'Paiement attendu' : status)
+const statusStyle = (status: string) => ({
+  processing: 'bg-amber-50 text-amber-800 ring-amber-200',
+  awaiting_payment: 'bg-orange-50 text-orange-800 ring-orange-200',
+  preparing: 'bg-blue-50 text-blue-800 ring-blue-200',
+  shipped: 'bg-violet-50 text-violet-800 ring-violet-200',
+  delivered: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+}[status] || 'bg-stone-100 text-stone-700 ring-stone-200')
+const pendingOrders = computed(() => orders.value.filter(order => ['processing', 'awaiting_payment'].includes(order.order_status)).length)
+const preparingOrders = computed(() => orders.value.filter(order => order.order_status === 'preparing').length)
+const deliveredOrders = computed(() => orders.value.filter(order => order.order_status === 'delivered').length)
+const lowStockCount = computed(() => products.value.filter(product => product.stock_quantity <= 5).length)
+const filteredOrders = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase('fr')
+  return orders.value.filter((order) => {
+    const matchesQuery = !query || [order.order_number, order.customer_alias, order.customer_phone, order.delivery_address]
+      .some(value => String(value || '').toLocaleLowerCase('fr').includes(query))
+    return matchesQuery && (statusFilter.value === 'all' || order.order_status === statusFilter.value)
+  })
+})
+const filteredProducts = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase('fr')
+  return products.value.filter(product => !query || [product.name, product.category, product.variant_name]
+    .some(value => String(value || '').toLocaleLowerCase('fr').includes(query)))
+})
 </script>
 
 <template>
-  <section class="mx-auto max-w-6xl py-8">
-    <div class="mb-8 flex items-center justify-between gap-4">
-      <div>
-        <p class="text-sm font-medium uppercase tracking-widest text-rose-700">Marasses</p>
-        <h1 class="mt-1 text-3xl font-bold">Administration</h1>
+  <section class="mx-auto max-w-7xl py-6 sm:py-10">
+    <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-900 text-lg font-bold text-white">M</div>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-rose-700">Marasses · Boutique</p>
+          <h1 class="text-2xl font-bold sm:text-3xl">Tableau de bord</h1>
+        </div>
       </div>
-      <button v-if="token" class="rounded-lg border px-4 py-2 text-sm hover:bg-stone-100" @click="signOut">Se déconnecter</button>
+      <button v-if="token" class="rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-medium hover:bg-stone-100" @click="signOut">Se déconnecter</button>
     </div>
 
     <div v-if="error" role="alert" class="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{{ error }}</div>
     <div v-if="notice" role="status" class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{{ notice }}</div>
 
-    <form v-if="!token" class="mx-auto max-w-md rounded-2xl border bg-white p-6 shadow-sm" @submit.prevent="signIn">
+    <form v-if="!token" class="mx-auto max-w-md rounded-2xl border bg-white p-6 shadow-sm sm:p-8" @submit.prevent="signIn">
       <h2 class="text-xl font-semibold">Connexion réservée</h2>
       <p class="mt-2 text-sm text-stone-600">Entre le mot de passe administrateur configuré dans Render. Il ne sera pas conservé dans le navigateur.</p>
       <label class="mt-5 block text-sm font-medium" for="admin-password">Mot de passe administrateur</label>
@@ -123,39 +150,57 @@ const statuses: Record<string, string> = {
     </form>
 
     <template v-else>
-      <div class="mb-6 flex gap-2 border-b">
-        <button class="border-b-2 px-4 py-3 font-medium" :class="activeTab === 'orders' ? 'border-rose-800 text-rose-900' : 'border-transparent text-stone-500'" @click="activeTab = 'orders'">Commandes ({{ orders.length }})</button>
-        <button class="border-b-2 px-4 py-3 font-medium" :class="activeTab === 'products' ? 'border-rose-800 text-rose-900' : 'border-transparent text-stone-500'" @click="activeTab = 'products'">Produits ({{ products.length }})</button>
-        <button class="ml-auto px-3 py-3 text-sm text-stone-600 hover:text-rose-800" :disabled="busy" @click="loadDashboard">Actualiser</button>
+      <div class="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <article class="rounded-2xl border border-amber-100 bg-white p-4 shadow-sm"><p class="text-sm text-stone-500">À traiter</p><p class="mt-2 text-3xl font-bold text-amber-700">{{ pendingOrders }}</p><p class="mt-1 text-xs text-stone-500">commandes en attente</p></article>
+        <article class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm"><p class="text-sm text-stone-500">En préparation</p><p class="mt-2 text-3xl font-bold text-blue-700">{{ preparingOrders }}</p><p class="mt-1 text-xs text-stone-500">commandes à emballer</p></article>
+        <article class="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm"><p class="text-sm text-stone-500">Livrées</p><p class="mt-2 text-3xl font-bold text-emerald-700">{{ deliveredOrders }}</p><p class="mt-1 text-xs text-stone-500">sur les 100 dernières</p></article>
+        <article class="rounded-2xl border border-rose-100 bg-white p-4 shadow-sm"><p class="text-sm text-stone-500">Stocks faibles</p><p class="mt-2 text-3xl font-bold text-rose-800">{{ lowStockCount }}</p><p class="mt-1 text-xs text-stone-500">formats à 5 unités ou moins</p></article>
       </div>
 
-      <div v-if="busy" class="rounded-xl border bg-white p-8 text-center text-stone-600">Chargement…</div>
-      <div v-else-if="activeTab === 'orders'" class="space-y-4">
-        <p v-if="!orders.length" class="rounded-xl border bg-white p-8 text-center text-stone-600">Aucune commande pour le moment.</p>
-        <article v-for="order in orders" :key="order.id" class="rounded-2xl border bg-white p-5 shadow-sm">
-          <div class="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 class="text-lg font-semibold">{{ order.order_number }}</h2>
-              <p class="mt-1 text-sm text-stone-600">{{ new Date(order.created_at).toLocaleString('fr-FR') }} · {{ order.zone || 'Zone inconnue' }}</p>
+      <div class="mb-5 flex flex-col gap-3 rounded-2xl border bg-white p-3 shadow-sm sm:flex-row sm:items-center">
+        <div class="flex rounded-xl bg-stone-100 p-1">
+          <button class="rounded-lg px-4 py-2 text-sm font-semibold" :class="activeTab === 'orders' ? 'bg-white text-rose-900 shadow-sm' : 'text-stone-600'" @click="activeTab = 'orders'; searchQuery = ''">Commandes <span class="ml-1 text-xs">{{ orders.length }}</span></button>
+          <button class="rounded-lg px-4 py-2 text-sm font-semibold" :class="activeTab === 'products' ? 'bg-white text-rose-900 shadow-sm' : 'text-stone-600'" @click="activeTab = 'products'; searchQuery = ''">Produits <span class="ml-1 text-xs">{{ products.length }}</span></button>
+        </div>
+        <label class="relative flex-1">
+          <span class="sr-only">Rechercher {{ activeTab === 'orders' ? 'une commande' : 'un produit' }}</span>
+          <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400">⌕</span>
+          <input v-model="searchQuery" class="w-full rounded-xl border border-stone-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" :placeholder="activeTab === 'orders' ? 'Référence, client, téléphone…' : 'Nom du produit, catégorie…'" />
+        </label>
+        <select v-if="activeTab === 'orders'" v-model="statusFilter" class="rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm">
+          <option value="all">Tous les états</option><option v-for="(label, value) in statuses" :key="value" :value="value">{{ label }}</option><option value="awaiting_payment">Paiement attendu</option>
+        </select>
+        <button class="rounded-xl border border-stone-200 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50" :disabled="busy" @click="loadDashboard">{{ busy ? 'Actualisation…' : 'Actualiser' }}</button>
+      </div>
+
+      <div v-if="busy && !orders.length && !products.length" class="rounded-2xl border bg-white p-10 text-center text-stone-600">Chargement du tableau de bord…</div>
+      <div v-else-if="activeTab === 'orders'" class="space-y-3">
+        <p v-if="!filteredOrders.length" class="rounded-2xl border bg-white p-10 text-center text-stone-600">Aucune commande ne correspond à cette recherche.</p>
+        <article v-for="order in filteredOrders" :key="order.id" class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-3 bg-stone-50/80 px-4 py-4 sm:px-6">
+            <div class="flex flex-wrap items-center gap-3">
+              <h2 class="font-bold">{{ order.order_number }}</h2>
+              <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset" :class="statusStyle(order.order_status)">{{ statusLabel(order.order_status) }}</span>
             </div>
-            <strong class="text-lg">{{ money(order.total_amount) }} FCFA</strong>
+            <div class="text-right"><strong class="block text-lg">{{ money(order.total_amount) }} F</strong><span class="text-xs text-stone-500">{{ new Date(order.created_at).toLocaleString('fr-FR') }}</span></div>
           </div>
-          <div class="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
-            <div class="space-y-1 text-sm">
-              <p><strong>Client :</strong> {{ order.customer_alias || 'Client' }} · <a class="text-rose-800 underline" :href="`tel:${order.customer_phone}`">{{ order.customer_phone }}</a></p>
-              <p><strong>Adresse :</strong> {{ order.delivery_address }}</p>
-              <p><strong>Paiement :</strong> {{ order.payment_method }} · {{ order.payment_status }}</p>
-              <a v-if="order.delivery_latitude && order.delivery_longitude" class="inline-block text-rose-800 underline" :href="`https://www.openstreetmap.org/?mlat=${order.delivery_latitude}&mlon=${order.delivery_longitude}#map=17/${order.delivery_latitude}/${order.delivery_longitude}`" target="_blank" rel="noopener noreferrer">Voir la position sur la carte</a>
+          <div class="grid gap-5 p-4 sm:grid-cols-2 sm:p-6">
+            <div>
+              <h3 class="mb-2 text-xs font-bold uppercase tracking-wider text-stone-500">Client et livraison</h3>
+              <p class="font-medium">{{ order.customer_alias || 'Client' }} · <a class="text-rose-800 hover:underline" :href="`tel:${order.customer_phone}`">{{ order.customer_phone }}</a></p>
+              <p class="mt-1 text-sm text-stone-600">{{ order.delivery_address }} <span v-if="order.zone">· {{ order.zone }}</span></p>
+              <a v-if="order.delivery_latitude && order.delivery_longitude" class="mt-2 inline-flex text-sm font-medium text-rose-800 hover:underline" :href="`https://www.openstreetmap.org/?mlat=${order.delivery_latitude}&mlon=${order.delivery_longitude}#map=17/${order.delivery_latitude}/${order.delivery_longitude}`" target="_blank" rel="noopener noreferrer">⌖ Ouvrir la position sur la carte</a>
             </div>
             <div>
-              <p class="mb-2 text-sm font-semibold">Articles</p>
-              <ul class="space-y-1 text-sm text-stone-700"><li v-for="(item, index) in order.items" :key="index">{{ item.product }} · {{ item.variant }} × {{ item.quantity }} — {{ money(item.unit_price * item.quantity) }} F</li></ul>
+              <h3 class="mb-2 text-xs font-bold uppercase tracking-wider text-stone-500">Articles commandés</h3>
+              <ul class="space-y-2 text-sm"><li v-for="(item, index) in order.items" :key="index" class="flex justify-between gap-3"><span>{{ item.product }} · {{ item.variant }} <span class="text-stone-500">× {{ item.quantity }}</span></span><span class="shrink-0 font-medium">{{ money(item.unit_price * item.quantity) }} F</span></li></ul>
+              <p class="mt-3 border-t pt-2 text-xs text-stone-500">{{ order.payment_method }} · Paiement {{ order.payment_status }}</p>
             </div>
           </div>
-          <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-            <p class="text-sm text-stone-600">Sous-total {{ money(order.subtotal_amount) }} F · livraison {{ money(order.delivery_fee) }} F</p>
-            <label class="flex items-center gap-2 text-sm">État
-              <select v-model="order.order_status" class="rounded-lg border p-2" @change="updateStatus(order)">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 sm:px-6">
+            <p class="text-xs text-stone-500">Articles {{ money(order.subtotal_amount) }} F <span class="px-1">+</span> livraison {{ money(order.delivery_fee) }} F</p>
+            <label class="flex items-center gap-2 text-sm font-medium">Mettre à jour
+              <select v-model="order.order_status" :disabled="['awaiting_payment', 'failed', 'cancelled', 'expired'].includes(order.order_status)" class="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm disabled:bg-stone-100" @change="updateStatus(order)">
                 <option v-for="(label, value) in statuses" :key="value" :value="value">{{ label }}</option>
               </select>
             </label>
@@ -163,17 +208,17 @@ const statuses: Record<string, string> = {
         </article>
       </div>
 
-      <div v-else class="overflow-hidden rounded-2xl border bg-white shadow-sm">
-        <p v-if="!products.length" class="p-8 text-center text-stone-600">Aucun produit trouvé.</p>
+      <div v-else class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <p v-if="!filteredProducts.length" class="p-10 text-center text-stone-600">Aucun produit ne correspond à cette recherche.</p>
         <div v-else class="overflow-x-auto">
-          <table class="w-full min-w-[680px] text-left text-sm">
-            <thead class="bg-stone-100 text-stone-600"><tr><th class="p-3">Produit</th><th class="p-3">Format</th><th class="p-3">Prix (FCFA)</th><th class="p-3">Stock</th><th class="p-3"></th></tr></thead>
-            <tbody><tr v-for="product in products" :key="product.variant_id" class="border-t">
-              <td class="p-3"><strong>{{ product.name }}</strong><span class="block text-xs text-stone-500">{{ product.category }}<span v-if="!product.is_active"> · masqué</span></span></td>
-              <td class="p-3">{{ product.variant_name || 'Format standard' }}</td>
-              <td class="p-3"><input v-model.number="product.price" type="number" min="0" step="50" class="w-32 rounded-lg border p-2" :aria-label="`Prix de ${product.name}`" /></td>
-              <td class="p-3"><input v-model.number="product.stock_quantity" type="number" min="0" step="1" class="w-24 rounded-lg border p-2" :aria-label="`Stock de ${product.name}`" /></td>
-              <td class="p-3"><button class="rounded-lg border border-rose-200 px-3 py-2 text-rose-900 hover:bg-rose-50" @click="updateVariant(product)">Enregistrer</button></td>
+          <table class="w-full min-w-[720px] text-left text-sm">
+            <thead class="bg-stone-50 text-xs uppercase tracking-wider text-stone-500"><tr><th class="px-5 py-4">Produit</th><th class="px-4 py-4">Format</th><th class="px-4 py-4">Prix</th><th class="px-4 py-4">Stock</th><th class="px-5 py-4"></th></tr></thead>
+            <tbody><tr v-for="product in filteredProducts" :key="product.variant_id" class="border-t border-stone-100 hover:bg-stone-50/70">
+              <td class="px-5 py-4"><strong>{{ product.name }}</strong><span class="mt-1 block text-xs text-stone-500">{{ product.category }}<span v-if="!product.is_active"> · Masqué du catalogue</span></span></td>
+              <td class="px-4 py-4 text-stone-600">{{ product.variant_name || 'Format standard' }}</td>
+              <td class="px-4 py-4"><div class="flex items-center gap-2"><input v-model.number="product.price" type="number" min="0" step="50" class="w-28 rounded-lg border border-stone-300 p-2" :aria-label="`Prix de ${product.name}`" /><span class="text-xs text-stone-500">FCFA</span></div></td>
+              <td class="px-4 py-4"><div class="flex items-center gap-2"><input v-model.number="product.stock_quantity" type="number" min="0" step="1" class="w-20 rounded-lg border border-stone-300 p-2" :aria-label="`Stock de ${product.name}`" /><span class="rounded-full px-2 py-1 text-xs font-semibold" :class="product.stock_quantity <= 5 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'">{{ product.stock_quantity <= 5 ? 'Faible' : 'Disponible' }}</span></div></td>
+              <td class="px-5 py-4 text-right"><button class="rounded-lg bg-rose-900 px-3 py-2 font-semibold text-white hover:bg-rose-800" @click="updateVariant(product)">Enregistrer</button></td>
             </tr></tbody>
           </table>
         </div>
