@@ -1,0 +1,1 @@
+<template><div><Navbar/><main class="mx-auto min-h-screen max-w-6xl px-4 py-8"><NuxtPage/></main><footer class="border-t bg-white px-4 py-6 text-center text-sm text-stone-500">Bien-être intime, en toute discrétion.</footer></div></template>

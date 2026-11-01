@@ -1,0 +1,3 @@
+import { defineStore } from 'pinia'
+type Variant={id:string;name:string|null;price:number;stock:number}; type Line={variant:Variant;productName:string;quantity:number}
+export const useCartStore=defineStore('cart',{state:()=>({lines:[] as Line[]}),getters:{subtotal:s=>s.lines.reduce((n,l)=>n+l.variant.price*l.quantity,0),count:s=>s.lines.reduce((n,l)=>n+l.quantity,0)},actions:{add(productName:string,variant:Variant){const line=this.lines.find(x=>x.variant.id===variant.id); if(line){if(line.quantity>=variant.stock)return;line.quantity++}else if(variant.stock>0)this.lines.push({productName,variant,quantity:1})},remove(id:string){this.lines=this.lines.filter(x=>x.variant.id!==id)},clear(){this.lines=[]}} ,persist:true})

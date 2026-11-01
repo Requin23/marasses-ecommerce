@@ -1,0 +1,1 @@
+<template><main class="mx-auto max-w-2xl py-16"><p class="text-sm text-stone-500">MÉTÉO LOCALE</p><h1 class="mt-3 text-3xl font-semibold">Prévisions du jour</h1><p class="mt-5 text-stone-600">Consultez les conditions météo de votre région.</p><button class="mt-8 text-sm underline" @click="$router.back()">Retour</button></main></template>
