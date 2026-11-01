@@ -13,7 +13,7 @@ from uuid import UUID
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -96,8 +96,26 @@ class OrderIn(BaseModel):
     customer_alias: str | None = Field(default=None, max_length=100)
     customer_phone: str = Field(min_length=6, max_length=20)
     delivery_address: str = Field(min_length=3, max_length=500)
+    delivery_latitude: float | None = Field(default=None, ge=-90, le=90)
+    delivery_longitude: float | None = Field(default=None, ge=-180, le=180)
+    delivery_location_accuracy_m: float | None = Field(default=None, ge=0, le=100000)
+    delivery_location_consent: bool = False
     payment_method: Literal["Paiement à la livraison", "GeniusPay"] = "Paiement à la livraison"
     items: list[Item] = Field(min_length=1, max_length=30)
+
+    @model_validator(mode="after")
+    def validate_delivery_location(self):
+        has_latitude = self.delivery_latitude is not None
+        has_longitude = self.delivery_longitude is not None
+        if has_latitude != has_longitude:
+            raise ValueError("La latitude et la longitude doivent être fournies ensemble.")
+        if has_latitude and not self.delivery_location_consent:
+            raise ValueError("Le partage de la position nécessite un consentement explicite.")
+        if self.delivery_location_accuracy_m is not None and not has_latitude:
+            raise ValueError("La précision ne peut être enregistrée sans position.")
+        if self.delivery_location_consent and not has_latitude:
+            raise ValueError("Une position est nécessaire pour enregistrer ce consentement.")
+        return self
 
 
 async def create_geniuspay_checkout(order_number: str, amount: Decimal, phone: str, alias: str | None, status_token: str):
@@ -182,11 +200,15 @@ async def create_order(data: OrderIn, s: Session = Depends(db)):
 
         s.execute(text("""INSERT INTO orders(
             order_number,delivery_zone_id,customer_alias,customer_phone,delivery_address,
+            delivery_latitude,delivery_longitude,delivery_location_accuracy_m,delivery_location_consent_at,
             subtotal_amount,delivery_fee,total_amount,payment_method,payment_status,order_status,
             payment_provider,payment_reference,payment_checkout_url,payment_status_token_hash
-        ) VALUES(:n,:z,:a,:p,:d,:subtotal,:fee,:total,:method,'pending',:status,:provider,:reference,:checkout,:token_hash)"""), {
+        ) VALUES(:n,:z,:a,:p,:d,:latitude,:longitude,:accuracy,CASE WHEN :location_consent THEN NOW() ELSE NULL END,
+            :subtotal,:fee,:total,:method,'pending',:status,:provider,:reference,:checkout,:token_hash)"""), {
             "n": order_number, "z": data.delivery_zone_id, "a": data.customer_alias,
             "p": data.customer_phone, "d": data.delivery_address, "subtotal": subtotal,
+            "latitude": data.delivery_latitude, "longitude": data.delivery_longitude,
+            "accuracy": data.delivery_location_accuracy_m, "location_consent": data.delivery_location_consent,
             "fee": fee, "total": total, "method": data.payment_method, "status": order_status,
             "provider": provider, "reference": reference, "checkout": checkout_url, "token_hash": status_token_hash,
         })

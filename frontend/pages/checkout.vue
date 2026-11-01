@@ -9,12 +9,62 @@ const alias = ref('')
 const phone = ref('')
 const address = ref('')
 const paymentMethod = ref('Paiement à la livraison')
+const locationConsent = ref(false)
+const location = ref<{ latitude: number; longitude: number; accuracy: number } | null>(null)
+const locating = ref(false)
+const locationError = ref('')
 const result = ref<any>(null)
 const error = ref('')
 const busy = ref(false)
 const confirmedLines = ref<any[]>([])
 const delivery = computed(() => cart.lines.length ? (zones.value?.find(item => item.id === zone.value)?.fee || 0) : 0)
 const total = computed(() => cart.subtotal + Number(delivery.value))
+const locationMapUrl = computed(() => {
+  if (!location.value) return ''
+  const { latitude, longitude } = location.value
+  const delta = Math.max(0.003, (location.value.accuracy / 111_000) * 2)
+  const params = new URLSearchParams({
+    bbox: `${longitude - delta},${latitude - delta},${longitude + delta},${latitude + delta}`,
+    layer: 'mapnik',
+    marker: `${latitude},${longitude}`,
+  })
+  return `https://www.openstreetmap.org/export/embed.html?${params.toString()}`
+})
+
+function clearLocation() {
+  location.value = null
+  locationError.value = ''
+}
+
+function requestLocation() {
+  locationError.value = ''
+  if (!locationConsent.value) return
+  if (!navigator.geolocation) {
+    locationError.value = 'La localisation n’est pas disponible dans ce navigateur.'
+    return
+  }
+
+  locating.value = true
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      location.value = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      }
+      locating.value = false
+    },
+    (cause) => {
+      locationError.value = cause.code === cause.PERMISSION_DENIED
+        ? 'Autorisation refusée. Vous pouvez l’autoriser dans les paramètres du navigateur ou continuer sans partager votre position.'
+        : cause.code === cause.TIMEOUT
+          ? 'La localisation prend trop de temps. Réessayez ou continuez sans partager votre position.'
+          : 'Position indisponible. Vérifiez que la localisation est activée ou continuez sans partager votre position.'
+      locating.value = false
+    },
+    { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 },
+  )
+}
 
 async function submit() {
   error.value = ''
@@ -32,6 +82,10 @@ async function submit() {
         customer_alias: alias.value || null,
         customer_phone: phone.value,
         delivery_address: address.value,
+        delivery_latitude: location.value?.latitude ?? null,
+        delivery_longitude: location.value?.longitude ?? null,
+        delivery_location_accuracy_m: location.value?.accuracy ?? null,
+        delivery_location_consent: Boolean(locationConsent.value && location.value),
         payment_method: paymentMethod.value,
         items: cart.lines.map(line => ({ variant_id: line.variant.id, quantity: line.quantity })),
       },
@@ -75,6 +129,36 @@ async function submit() {
           <option v-for="item in zones || []" :key="item.id" :value="item.id">{{ item.name }} · {{ item.fee }} FCFA</option>
         </select>
         <textarea v-model="address" required maxlength="500" autocomplete="street-address" class="w-full rounded-xl border p-3" placeholder="Point de repère / adresse" rows="3" />
+        <section class="space-y-3 rounded-xl border border-stone-200 bg-white p-4" aria-labelledby="location-title">
+          <div>
+            <h2 id="location-title" class="font-semibold">Partager ma position (facultatif)</h2>
+            <p class="mt-1 text-sm text-stone-600">
+              Pour faciliter la livraison, vous pouvez joindre votre position à cette commande. Le navigateur vous demandera votre autorisation. La carte est fournie par OpenStreetMap; afficher la carte lui transmet les coordonnées. Vous pouvez continuer sans partager votre position.
+            </p>
+          </div>
+          <label class="flex items-start gap-2 text-sm">
+            <input v-model="locationConsent" type="checkbox" class="mt-1" @change="!locationConsent && clearLocation()">
+            <span>J’accepte d’utiliser ma position pour cette commande et de l’afficher sur OpenStreetMap.</span>
+          </label>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" :disabled="!locationConsent || locating" class="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50" @click="requestLocation">
+              {{ locating ? 'Recherche de la position…' : location ? 'Actualiser ma position' : 'Demander l’autorisation et me localiser' }}
+            </button>
+            <button v-if="location" type="button" class="rounded-lg px-3 py-2 text-sm text-rose-800 underline" @click="clearLocation">Retirer ma position</button>
+          </div>
+          <p v-if="locationError" role="status" class="text-sm text-amber-800">{{ locationError }}</p>
+          <div v-if="location && locationConsent" class="space-y-2">
+            <p class="text-sm text-emerald-800">Position obtenue — précision estimée : ±{{ Math.round(location.accuracy) }} m. Elle sera jointe à la commande.</p>
+            <iframe
+              :src="locationMapUrl"
+              title="Carte de votre position pour la livraison"
+              class="h-56 w-full rounded-lg border"
+              loading="lazy"
+              referrerpolicy="no-referrer"
+            />
+            <a :href="`https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=18/${location.latitude}/${location.longitude}`" target="_blank" rel="noreferrer" class="text-sm text-rose-800 underline">Ouvrir la carte en grand</a>
+          </div>
+        </section>
         <select v-model="paymentMethod" class="w-full rounded-xl border p-3">
           <option>Paiement à la livraison</option>
           <option>GeniusPay</option>

@@ -28,6 +28,13 @@ Après avoir configuré `DATABASE_URL`, démarrez avec `docker compose up --buil
 Le flux Sandbox n’a pas été testé contre un paiement réel.
 
 
+### Position de livraison facultative
+
+Au checkout, la personne peut cocher son accord puis cliquer pour déclencher la demande de localisation du navigateur. Si elle accepte et confirme la commande, la latitude, la longitude, la précision estimée et l’heure du consentement sont enregistrées avec la commande. L’affichage de la carte OpenStreetMap transmet également les coordonnées à OpenStreetMap. La localisation reste facultative.
+
+Pour une base Supabase existante, exécutez `database/migrations/002_delivery_location.sql` dans le SQL Editor **avant de publier** la version qui enregistre les coordonnées. Une nouvelle base ajoute les colonnes directement via `database/schema.sql`.
+
+
 ### Prévisualisation gratuite (pas pour une boutique en production)
 
 Le dépôt contient `render.yaml` pour publier l’API FastAPI sur Render. Pour une prévisualisation, le site Nuxt peut être publié sur Vercel en reliant le dépôt GitHub et en choisissant `frontend` comme répertoire racine. L’offre Hobby de Vercel est réservée à un usage personnel non commercial; l’offre gratuite Render est également limitée et Render déconseille de l’utiliser pour une application en production. Une boutique qui vend réellement ne doit donc pas compter sur ces offres gratuites.
