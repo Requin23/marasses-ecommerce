@@ -34,6 +34,10 @@ Au checkout, la personne peut cocher son accord puis cliquer pour déclencher la
 
 Pour une base Supabase existante, exécutez `database/migrations/002_delivery_location.sql` dans le SQL Editor **avant de publier** la version qui enregistre les coordonnées. Une nouvelle base ajoute les colonnes directement via `database/schema.sql`.
 
+### Aide et réclamations
+
+La page `/assistance` enregistre les demandes dans la table Supabase `support_requests`. Après déploiement, consultez ces demandes dans **Supabase → Table Editor → support_requests**. Pour afficher le bouton WhatsApp, définissez `NUXT_PUBLIC_WHATSAPP_NUMBER` dans les variables Vercel au format international sans `+`, espaces ou tirets (par exemple `226XXXXXXXX`), puis redéployez le frontend. Pour une base existante, exécutez `database/migrations/003_support_requests.sql` avant de publier cette version.
+
 
 ### Prévisualisation gratuite (pas pour une boutique en production)
 

@@ -6,6 +6,7 @@ export default defineNuxtConfig({
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api',
       geniusPayEnvironment: process.env.NUXT_PUBLIC_GENIUSPAY_ENVIRONMENT || 'sandbox',
+      whatsappSupportNumber: process.env.NUXT_PUBLIC_WHATSAPP_NUMBER || '',
     },
   },
   app: {

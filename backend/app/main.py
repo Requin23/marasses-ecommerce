@@ -53,6 +53,47 @@ def health(s: Session = Depends(db)):
         raise HTTPException(503, "Base de données indisponible")
 
 
+class SupportRequestIn(BaseModel):
+    order_number: str | None = Field(default=None, max_length=20)
+    customer_phone: str = Field(min_length=6, max_length=20)
+    topic: Literal["Commande", "Livraison", "Paiement", "Produit", "Autre"]
+    message: str = Field(min_length=10, max_length=2000)
+    consent: bool = False
+    website: str = Field(default="", max_length=200)
+
+    @model_validator(mode="after")
+    def validate_support_request(self):
+        if not self.consent:
+            raise ValueError("Votre accord est nécessaire pour traiter la réclamation.")
+        if self.website.strip():
+            raise ValueError("Demande invalide.")
+        if self.order_number is not None:
+            self.order_number = self.order_number.strip() or None
+        self.customer_phone = self.customer_phone.strip()
+        self.message = self.message.strip()
+        return self
+
+
+@app.post("/api/support-requests", status_code=201)
+def create_support_request(data: SupportRequestIn, s: Session = Depends(db)):
+    reference = "REC-" + "".join(secrets.choice(string.digits) for _ in range(8))
+    try:
+        s.execute(text("""INSERT INTO support_requests(
+            reference,order_number,customer_phone,topic,message,consent_at
+        ) VALUES(:reference,:order_number,:phone,:topic,:message,NOW())"""), {
+            "reference": reference,
+            "order_number": data.order_number,
+            "phone": data.customer_phone,
+            "topic": data.topic,
+            "message": data.message,
+        })
+        s.commit()
+        return {"reference": reference, "message": "Votre demande a bien été envoyée."}
+    except Exception:
+        s.rollback()
+        raise HTTPException(503, "Impossible d’envoyer votre demande pour le moment. Réessayez plus tard.")
+
+
 @app.get("/api/categories")
 def categories(s: Session = Depends(db)):
     rows = s.execute(text("SELECT id,name,slug,description FROM categories WHERE is_active ORDER BY name"))

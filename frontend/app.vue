@@ -12,6 +12,7 @@ useHead(() => ({ title: isDiscreet.value ? 'Météo locale' : 'Marasses | Bien-�
     </main>
     <footer v-if="!isDiscreet" class="border-t bg-white px-4 py-6 text-center text-sm text-stone-500">
       Bien-être intime, en toute discrétion.
+      <NuxtLink to="/assistance" class="ml-2 text-rose-800 underline">Aide / Réclamation</NuxtLink>
     </footer>
   </div>
 </template>
