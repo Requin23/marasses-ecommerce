@@ -1,5 +1,24 @@
 <script setup lang="ts">
 const props = defineProps<{ slug: string; name: string }>()
+const imageFailed = ref(false)
+const imageSources: Record<string, string> = {
+  'preservatifs-classiques': 'https://www.manixshop.fr/cdn/shop/files/manix-natural-manixshopfr-1728030.jpg?v=1754986894',
+  'preservatifs-ultra-fins': 'https://www.pharmaforce.fr/resize/1200x1200/media/finish/img/normal/15/3059944118873-durex-nude-xl-ultra-fins-10-preservatifs-sensation-peau-contre-peau.jpg',
+  'gel-lubrifiant-aromatise': 'https://cdn.shop-apotheke.com/images/F00/374/810/F00374810-p5.jpg',
+  'huile-massage-gourmande': 'https://www.clairjoie.com/1613-large_default/trio-huiles-massage-comestibles.jpg',
+  'gowe-encens-superieur': 'https://i.etsystatic.com/29696511/r/il/4f4648/6365694319/il_570xN.6365694319_ee93.jpg',
+  'gel-intime-tonifiant': 'https://www.corinedefarme.fr/content/uploads/sites/2/2022/06/3468080409972_PT01-696x696.jpg',
+  'kayanmata-miel-herbes': 'https://media.achat-ville.com/uploads/cotedor/Produit/4b/prod_photo1_41703_1521787467.jpg',
+  'jeu-cartes-defis-coquin': '/images/products/jeu-cartes-defis-coquin.png',
+  'des-coquins-phosphorescents': '/images/products/des-coquins-phosphorescents.jpg',
+  'perles-taille-baya': 'https://www.lesjardinsdaissa.com/cdn/shop/files/bin-bin-baya-collier-afrique-jardins-aissa-nour.webp?v=1781967446&width=697',
+  'pack-decouverte-securite': '/images/products/pack-decouverte-securite.jpg',
+  'pack-secrets-seduction': 'https://karamatcosmetics.com/wp-content/uploads/2025/03/PHOTO-2025-03-02-11-20-26-4-scaled.jpg',
+  'pack-soiree-couple': '/images/products/pack-soiree-couple.webp',
+  'pack-soiree-pimentee': '/images/products/pack-soiree-pimentee.png',
+}
+const imageSource = computed(() => imageSources[props.slug])
+watch(() => props.slug, () => { imageFailed.value = false })
 
 const palettes: Record<string, { bg: string; ink: string; accent: string }> = {
   protection: { bg: '#f4e9e7', ink: '#8f173d', accent: '#d9a8a0' },
@@ -29,7 +48,8 @@ const isOil = computed(() => props.slug === 'huile-massage-gourmande')
 
 <template>
   <div class="relative flex h-48 items-center justify-center overflow-hidden rounded-xl" :style="{ backgroundColor: colors.bg }" role="img" :aria-label="`Illustration du produit ${name}`">
-    <svg viewBox="0 0 320 190" class="h-full w-full" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <img v-if="imageSource && !imageFailed" :src="imageSource" :alt="`Photo de ${name}`" referrerpolicy="no-referrer" class="h-full w-full object-contain p-2" @error="imageFailed = true" />
+    <svg v-else viewBox="0 0 320 190" class="h-full w-full" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
       <circle cx="160" cy="95" r="70" :fill="colors.accent" opacity=".28" />
       <circle cx="75" cy="40" r="18" :fill="colors.accent" opacity=".35" />
       <circle cx="256" cy="145" r="26" :fill="colors.accent" opacity=".22" />

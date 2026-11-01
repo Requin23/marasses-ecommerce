@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const router = useRouter()
 function activateDiscreetMode() {
-  void router.push('/discret')
+  void router.replace('/discret')
 }
 </script>
 

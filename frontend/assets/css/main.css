@@ -2,3 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 body { @apply bg-stone-50 text-stone-900; font-family: ui-sans-serif, system-ui, sans-serif; }
+
+/* Le thème du site suit automatiquement le réglage clair/sombre du téléphone. */
+@media (prefers-color-scheme: dark) {
+  body { background-color: #0f172a; color: #f1f5f9; color-scheme: dark; }
+  .bg-white { background-color: #172033; }
+  .bg-stone-50 { background-color: #0f172a; }
+  .bg-stone-100 { background-color: #1e293b; }
+  .border-stone-100, .border-stone-200, .border-stone-300 { border-color: #334155; }
+  .text-stone-900 { color: #f1f5f9; }
+  .text-stone-700 { color: #dbe4ef; }
+  .text-stone-600 { color: #cbd5e1; }
+  .text-stone-500 { color: #94a3b8; }
+  input:not([type="checkbox"]), textarea, select { background-color: #111b2e; color: #f1f5f9; border-color: #475569; }
+  input::placeholder, textarea::placeholder { color: #94a3b8; }
+  a.text-rose-800, a.text-rose-900 { color: #fda4af; }
+  .hover\:bg-stone-50:hover { background-color: #253247; }
+  .hover\:bg-stone-100:hover { background-color: #334155; }
+  .border-t, .border-b { border-color: #334155; }
+}
