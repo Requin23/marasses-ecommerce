@@ -4,6 +4,7 @@ node_modules/
 dist/
 .env
 .env.*
+!.env.production.example
 !.env.example
 __pycache__/
 *.py[cod]

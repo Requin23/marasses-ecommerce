@@ -1,1 +1,17 @@
-export default defineNuxtConfig({ modules: ['@pinia/nuxt','@nuxtjs/tailwindcss'], css:['~/assets/css/main.css'], runtimeConfig:{public:{apiBase:process.env.NUXT_PUBLIC_API_BASE||'http://localhost:8000/api'}}, app:{head:{title:'Marasses | Bien-être intime',meta:[{name:'description',content:'Bien-être intime, en toute discrétion.'}]}} })
+export default defineNuxtConfig({
+  modules: ['@pinia/nuxt', '@nuxtjs/tailwindcss'],
+  css: ['~/assets/css/main.css'],
+  runtimeConfig: {
+    apiInternalBase: process.env.NUXT_API_INTERNAL_BASE || 'http://api:8000/api',
+    public: {
+      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api',
+      geniusPayEnvironment: process.env.NUXT_PUBLIC_GENIUSPAY_ENVIRONMENT || 'sandbox',
+    },
+  },
+  app: {
+    head: {
+      title: 'Marasses | Bien-être intime',
+      meta: [{ name: 'description', content: 'Bien-être intime, en toute discrétion.' }],
+    },
+  },
+})

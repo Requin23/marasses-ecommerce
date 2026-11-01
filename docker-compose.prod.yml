@@ -1,0 +1,46 @@
+services:
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to your Supabase connection URI}
+      GENIUSPAY_API_KEY: ${GENIUSPAY_API_KEY:?Set the GeniusPay API key}
+      GENIUSPAY_API_SECRET: ${GENIUSPAY_API_SECRET:?Set the GeniusPay API secret}
+      GENIUSPAY_WEBHOOK_SECRET: ${GENIUSPAY_WEBHOOK_SECRET:-}
+      GENIUSPAY_ENVIRONMENT: ${GENIUSPAY_ENVIRONMENT:-sandbox}
+      APP_PUBLIC_URL: https://${DOMAIN:?Set DOMAIN, for example marasses.bf}
+      CORS_ORIGINS: https://${DOMAIN:?Set DOMAIN, for example marasses.bf}
+    expose:
+      - "8000"
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE: https://${DOMAIN:?Set DOMAIN, for example marasses.bf}/api
+      NUXT_API_INTERNAL_BASE: http://api:8000/api
+      NUXT_PUBLIC_GENIUSPAY_ENVIRONMENT: ${GENIUSPAY_ENVIRONMENT:-sandbox}
+    expose:
+      - "3000"
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN, for example marasses.bf}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:

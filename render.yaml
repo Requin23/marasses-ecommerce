@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: marasses-api
+    runtime: docker
+    plan: free
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: APP_PUBLIC_URL
+        sync: false
+      - key: GENIUSPAY_ENVIRONMENT
+        value: sandbox

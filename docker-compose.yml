@@ -9,6 +9,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
       - ./database/seed.sql:/docker-entrypoint-initdb.d/002-seed.sql:ro
+      - ./database/migrations/001_geniuspay.sql:/docker-entrypoint-initdb.d/003-geniuspay.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U marasses"]
       interval: 5s
@@ -17,7 +18,13 @@ services:
   api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://marasses:marasses@db:5432/marasses
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://marasses:marasses@db:5432/marasses}
+      GENIUSPAY_API_KEY: ${GENIUSPAY_API_KEY:-}
+      GENIUSPAY_API_SECRET: ${GENIUSPAY_API_SECRET:-}
+      GENIUSPAY_WEBHOOK_SECRET: ${GENIUSPAY_WEBHOOK_SECRET:-}
+      GENIUSPAY_ENVIRONMENT: ${GENIUSPAY_ENVIRONMENT:-sandbox}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     ports: ["8000:8000"]
     depends_on:
       db:
@@ -25,7 +32,9 @@ services:
   web:
     build: ./frontend
     environment:
-      NUXT_PUBLIC_API_BASE: http://localhost:8000/api
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:8000/api}
+      NUXT_API_INTERNAL_BASE: http://api:8000/api
+      NUXT_PUBLIC_GENIUSPAY_ENVIRONMENT: ${GENIUSPAY_ENVIRONMENT:-sandbox}
     ports: ["3000:3000"]
     depends_on: [api]
 volumes:
