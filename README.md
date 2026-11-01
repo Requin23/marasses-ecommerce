@@ -51,6 +51,10 @@ Le dépôt contient `render.yaml` pour publier l’API FastAPI sur Render. Pour 
 
 Les adresses gratuites `vercel.app` et `onrender.com` conviennent à une prévisualisation. Un domaine personnalisé comme `marasses.bf` doit être acheté séparément, puis relié dans le tableau de bord de l’hébergeur.
 
+### Administration
+
+La page privée est disponible à l’adresse `https://votre-site.vercel.app/admin`. Dans Render, ajoutez une variable secrète `ADMIN_API_KEY` d’au moins 32 caractères au service `marasses-api`, puis redéployez l’API. Utilisez un mot de passe aléatoire distinct; ne le mettez ni dans GitHub ni dans Vercel. La page permet de consulter les 100 dernières commandes, voir l’adresse et la position éventuellement partagée par le client, faire avancer leur état, et modifier le prix ou le stock des variantes. La session expire après 12 heures.
+
 
 ### Mise en ligne sur un serveur Linux
 

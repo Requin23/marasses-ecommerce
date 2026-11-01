@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import os
+import base64
 import secrets
 import string
 import time
@@ -29,8 +30,8 @@ cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://l
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "PATCH"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 GENIUSPAY_API = "https://geniuspay.ci/api/v1/merchant"
@@ -42,6 +43,111 @@ def db():
         yield session
     finally:
         session.close()
+
+
+def _admin_token(expiry: int, key: str) -> str:
+    payload = base64.urlsafe_b64encode(str(expiry).encode()).decode().rstrip("=")
+    signature = hmac.new(key.encode(), payload.encode(), hashlib.sha256).digest()
+    return payload + "." + base64.urlsafe_b64encode(signature).decode().rstrip("=")
+
+
+def require_admin(request: Request):
+    key = os.getenv("ADMIN_API_KEY", "").strip()
+    if len(key) < 32:
+        raise HTTPException(503, "L’accès administrateur n’est pas configuré.")
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    try:
+        payload, signature = token.split(".", 1)
+        expected = hmac.new(key.encode(), payload.encode(), hashlib.sha256).digest()
+        supplied = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
+        expiry = int(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode())
+    except (ValueError, TypeError):
+        raise HTTPException(401, "Session administrateur invalide ou expirée.")
+    if scheme.lower() != "bearer" or not hmac.compare_digest(expected, supplied) or expiry < int(time.time()):
+        raise HTTPException(401, "Session administrateur invalide ou expirée.")
+    return True
+
+
+class AdminLoginIn(BaseModel):
+    password: str = Field(min_length=1, max_length=256)
+
+
+@app.post("/api/admin/login")
+def admin_login(data: AdminLoginIn):
+    key = os.getenv("ADMIN_API_KEY", "").strip()
+    if len(key) < 32:
+        raise HTTPException(503, "L’accès administrateur n’est pas configuré.")
+    if not hmac.compare_digest(data.password.encode(), key.encode()):
+        raise HTTPException(401, "Mot de passe incorrect.")
+    return {"token": _admin_token(int(time.time()) + 12 * 60 * 60, key), "expires_in": 43200}
+
+
+@app.get("/api/admin/orders", dependencies=[Depends(require_admin)])
+def admin_orders(s: Session = Depends(db)):
+    rows = s.execute(text("""SELECT o.id,o.order_number,o.customer_alias,o.customer_phone,o.delivery_address,
+        o.delivery_latitude,o.delivery_longitude,o.delivery_location_accuracy_m,o.delivery_location_consent_at,
+        o.subtotal_amount,o.delivery_fee,o.total_amount,o.payment_method,o.payment_status,o.order_status,
+        o.payment_reference,o.created_at,z.name AS zone
+        FROM orders o LEFT JOIN delivery_zones z ON z.id=o.delivery_zone_id
+        ORDER BY o.created_at DESC LIMIT 100""")).mappings().all()
+    if not rows:
+        return []
+    ids = [row["id"] for row in rows]
+    items = s.execute(text("""SELECT oi.order_id,p.name AS product_name,pv.variant_name,oi.unit_price,oi.quantity
+        FROM order_items oi JOIN product_variants pv ON pv.id=oi.product_variant_id
+        JOIN products p ON p.id=pv.product_id WHERE oi.order_id=ANY(:ids)
+        ORDER BY p.name"""), {"ids": ids}).mappings().all()
+    by_order = {order_id: [] for order_id in ids}
+    for item in items:
+        by_order[item["order_id"]].append({"product": item["product_name"], "variant": item["variant_name"], "unit_price": float(item["unit_price"]), "quantity": item["quantity"]})
+    result = []
+    for row in rows:
+        order = dict(row)
+        order["id"] = str(order["id"])
+        order["items"] = by_order[row["id"]]
+        for field in ("subtotal_amount", "delivery_fee", "total_amount"):
+            order[field] = float(order[field])
+        result.append(order)
+    return result
+
+
+@app.get("/api/admin/products", dependencies=[Depends(require_admin)])
+def admin_products(s: Session = Depends(db)):
+    rows = s.execute(text("""SELECT p.id AS product_id,p.name,p.is_active,c.name AS category,
+        v.id AS variant_id,v.variant_name,v.price,v.stock_quantity
+        FROM products p LEFT JOIN categories c ON c.id=p.category_id
+        JOIN product_variants v ON v.product_id=p.id ORDER BY p.name,v.price""")).mappings().all()
+    return [{**dict(row), "product_id": str(row["product_id"]), "variant_id": str(row["variant_id"]), "price": float(row["price"])} for row in rows]
+
+
+class AdminVariantUpdate(BaseModel):
+    price: Decimal = Field(ge=0, le=100000000)
+    stock_quantity: int = Field(ge=0, le=1000000)
+
+
+@app.patch("/api/admin/variants/{variant_id}", dependencies=[Depends(require_admin)])
+def admin_update_variant(variant_id: UUID, data: AdminVariantUpdate, s: Session = Depends(db)):
+    result = s.execute(text("UPDATE product_variants SET price=:price,stock_quantity=:stock WHERE id=:id"), {"price": data.price, "stock": data.stock_quantity, "id": variant_id})
+    if result.rowcount != 1:
+        s.rollback()
+        raise HTTPException(404, "Format de produit introuvable.")
+    s.commit()
+    return {"ok": True}
+
+
+class AdminOrderUpdate(BaseModel):
+    order_status: Literal["processing", "preparing", "shipped", "delivered"]
+
+
+@app.patch("/api/admin/orders/{order_id}/status", dependencies=[Depends(require_admin)])
+def admin_update_order(order_id: UUID, data: AdminOrderUpdate, s: Session = Depends(db)):
+    result = s.execute(text("UPDATE orders SET order_status=:status WHERE id=:id AND payment_status NOT IN ('failed','cancelled','expired')"), {"status": data.order_status, "id": order_id})
+    if result.rowcount != 1:
+        s.rollback()
+        raise HTTPException(404, "Commande introuvable ou paiement annulé.")
+    s.commit()
+    return {"ok": True}
 
 
 @app.get("/api/health")
