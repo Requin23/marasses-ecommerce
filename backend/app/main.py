@@ -155,6 +155,13 @@ def admin_products(s: Session = Depends(db)):
     return [{**dict(row), "product_id": str(row["product_id"]), "variant_id": str(row["variant_id"]), "price": float(row["price"])} for row in rows]
 
 
+@app.get("/api/admin/support-requests", dependencies=[Depends(require_admin)])
+def admin_support_requests(s: Session = Depends(db)):
+    rows = s.execute(text("""SELECT reference,order_number,customer_phone,topic,message,consent_at,created_at
+        FROM support_requests ORDER BY created_at DESC LIMIT 100""")).mappings()
+    return [dict(row) for row in rows]
+
+
 class AdminVariantUpdate(BaseModel):
     price: Decimal = Field(ge=0, le=100000000)
     stock_quantity: int = Field(ge=0, le=1000000)

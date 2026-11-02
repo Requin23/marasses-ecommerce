@@ -4,11 +4,13 @@ useHead({ title: 'Administration | Marasses' })
 const config = useRuntimeConfig()
 const token = ref('')
 const password = ref('')
-const activeTab = ref<'orders' | 'products'>('orders')
+const activeTab = ref<'orders' | 'products' | 'support'>('orders')
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const orders = ref<any[]>([])
 const products = ref<any[]>([])
+const supportRequests = ref<any[]>([])
+const supportError = ref('')
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -24,9 +26,20 @@ async function loadDashboard() {
   error.value = ''
   busy.value = true
   try {
-    const [orderRows, productRows] = await Promise.all([api('/admin/orders'), api('/admin/products')])
-    orders.value = orderRows as any[]
-    products.value = productRows as any[]
+    const [orderResult, productResult, supportResult] = await Promise.allSettled([
+      api('/admin/orders'), api('/admin/products'), api('/admin/support-requests'),
+    ])
+    if (orderResult.status === 'rejected') throw orderResult.reason
+    if (productResult.status === 'rejected') throw productResult.reason
+    orders.value = orderResult.value as any[]
+    products.value = productResult.value as any[]
+    if (supportResult.status === 'fulfilled') {
+      supportRequests.value = supportResult.value as any[]
+      supportError.value = ''
+    } else {
+      supportRequests.value = []
+      supportError.value = supportResult.reason?.data?.detail || 'Impossible de charger les réclamations. Vérifie que la table support_requests existe dans Supabase.'
+    }
   } catch (cause: any) {
     if (cause?.status === 401) signOut()
     error.value = cause?.data?.detail || 'Impossible de charger les données. Vérifie la connexion puis réessaie.'
@@ -57,6 +70,7 @@ function signOut() {
   token.value = ''
   orders.value = []
   products.value = []
+  supportRequests.value = []
   if (import.meta.client) sessionStorage.removeItem('marasses-admin-token')
 }
 
@@ -123,6 +137,11 @@ const filteredProducts = computed(() => {
   return products.value.filter(product => !query || [product.name, product.category, product.variant_name]
     .some(value => String(value || '').toLocaleLowerCase('fr').includes(query)))
 })
+const filteredSupportRequests = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase('fr')
+  return supportRequests.value.filter(request => !query || [request.reference, request.order_number, request.customer_phone, request.topic, request.message]
+    .some(value => String(value || '').toLocaleLowerCase('fr').includes(query)))
+})
 </script>
 
 <template>
@@ -161,11 +180,12 @@ const filteredProducts = computed(() => {
         <div class="flex rounded-xl bg-stone-100 p-1">
           <button class="rounded-lg px-4 py-2 text-sm font-semibold" :class="activeTab === 'orders' ? 'bg-white text-rose-900 shadow-sm' : 'text-stone-600'" @click="activeTab = 'orders'; searchQuery = ''">Commandes <span class="ml-1 text-xs">{{ orders.length }}</span></button>
           <button class="rounded-lg px-4 py-2 text-sm font-semibold" :class="activeTab === 'products' ? 'bg-white text-rose-900 shadow-sm' : 'text-stone-600'" @click="activeTab = 'products'; searchQuery = ''">Produits <span class="ml-1 text-xs">{{ products.length }}</span></button>
+          <button class="rounded-lg px-4 py-2 text-sm font-semibold" :class="activeTab === 'support' ? 'bg-white text-rose-900 shadow-sm' : 'text-stone-600'" @click="activeTab = 'support'; searchQuery = ''">Réclamations <span class="ml-1 text-xs">{{ supportRequests.length }}</span></button>
         </div>
         <label class="relative flex-1">
           <span class="sr-only">Rechercher {{ activeTab === 'orders' ? 'une commande' : 'un produit' }}</span>
           <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400">⌕</span>
-          <input v-model="searchQuery" class="w-full rounded-xl border border-stone-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" :placeholder="activeTab === 'orders' ? 'Référence, client, téléphone…' : 'Nom du produit, catégorie…'" />
+          <input v-model="searchQuery" class="w-full rounded-xl border border-stone-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100" :placeholder="activeTab === 'orders' ? 'Référence, client, téléphone…' : activeTab === 'products' ? 'Nom du produit, catégorie…' : 'Référence, téléphone, sujet…'" />
         </label>
         <select v-if="activeTab === 'orders'" v-model="statusFilter" class="rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm">
           <option value="all">Tous les états</option><option v-for="(label, value) in statuses" :key="value" :value="value">{{ label }}</option><option value="awaiting_payment">Paiement attendu</option>
@@ -205,6 +225,22 @@ const filteredProducts = computed(() => {
               </select>
             </label>
           </div>
+        </article>
+      </div>
+
+      <div v-else-if="activeTab === 'support'" class="space-y-3">
+        <p v-if="supportError" role="alert" class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">{{ supportError }} Dans Supabase, exécute le fichier <code>database/migrations/003_support_requests.sql</code> si ce n’est pas déjà fait.</p>
+        <p v-else-if="!filteredSupportRequests.length" class="rounded-2xl border bg-white p-10 text-center text-stone-600">Aucune réclamation reçue pour le moment.</p>
+        <article v-for="request in filteredSupportRequests" :key="request.reference" class="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div class="flex flex-wrap items-center gap-2"><h2 class="font-bold">{{ request.reference }}</h2><span class="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-900">{{ request.topic }}</span></div>
+              <p class="mt-1 text-xs text-stone-500">{{ new Date(request.created_at).toLocaleString('fr-FR') }}</p>
+            </div>
+            <a class="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-rose-900 hover:bg-rose-50" :href="`tel:${request.customer_phone}`">Appeler {{ request.customer_phone }}</a>
+          </div>
+          <p v-if="request.order_number" class="mt-4 text-sm"><strong>Commande :</strong> {{ request.order_number }}</p>
+          <p class="mt-3 whitespace-pre-wrap rounded-xl bg-stone-50 p-4 text-sm leading-6 text-stone-700">{{ request.message }}</p>
         </article>
       </div>
 
