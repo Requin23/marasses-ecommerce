@@ -7,9 +7,10 @@ useHead(() => ({ title: isDiscreet.value ? 'Météo locale' : 'Marasses | Bien-�
 <template>
   <div>
     <Navbar v-if="!isDiscreet" />
-    <main :class="isDiscreet ? 'min-h-screen px-4' : 'mx-auto min-h-screen max-w-6xl px-4 py-8'">
+    <main :class="isDiscreet ? 'min-h-screen px-4' : 'mx-auto min-h-screen max-w-6xl px-4 pt-8 pb-28'">
       <NuxtPage />
     </main>
+    <CartBar v-if="!isDiscreet" />
     <footer v-if="!isDiscreet" class="border-t bg-white px-4 py-6 text-center text-sm text-stone-500">
       Bien-être intime, en toute discrétion.
       <NuxtLink to="/assistance" class="ml-2 text-rose-800 underline">Aide / Réclamation</NuxtLink>
