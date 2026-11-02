@@ -6,6 +6,7 @@ import base64
 import secrets
 import string
 import time
+from threading import Lock
 from decimal import Decimal
 from typing import Literal
 from urllib.parse import urlencode, urlparse
@@ -33,6 +34,39 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+_rate_limit_lock = Lock()
+_rate_limit_events: dict[tuple[str, str], list[float]] = {}
+
+
+def rate_limit(bucket: str, limit: int, window_seconds: int):
+    def check(request: Request):
+        now = time.monotonic()
+        ip_address = request.client.host if request.client else "unknown"
+        key = (bucket, ip_address)
+        with _rate_limit_lock:
+            events = [stamp for stamp in _rate_limit_events.get(key, []) if now - stamp < window_seconds]
+            if len(events) >= limit:
+                retry_after = max(1, int(window_seconds - (now - events[0])))
+                _rate_limit_events[key] = events
+                raise HTTPException(429, "Trop de tentatives. Réessaie plus tard.", headers={"Retry-After": str(retry_after)})
+            events.append(now)
+            _rate_limit_events[key] = events
+            if len(_rate_limit_events) > 10000:
+                expired = [event_key for event_key, stamps in _rate_limit_events.items() if not stamps or now - stamps[-1] >= window_seconds]
+                for event_key in expired:
+                    _rate_limit_events.pop(event_key, None)
+    return check
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)")
+    return response
 
 GENIUSPAY_API = "https://geniuspay.ci/api/v1/merchant"
 
@@ -73,7 +107,7 @@ class AdminLoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
-@app.post("/api/admin/login")
+@app.post("/api/admin/login", dependencies=[Depends(rate_limit("admin-login", 5, 900))])
 def admin_login(data: AdminLoginIn):
     key = os.getenv("ADMIN_API_KEY", "").strip()
     if len(key) < 32:
@@ -180,7 +214,7 @@ class SupportRequestIn(BaseModel):
         return self
 
 
-@app.post("/api/support-requests", status_code=201)
+@app.post("/api/support-requests", status_code=201, dependencies=[Depends(rate_limit("support", 5, 600))])
 def create_support_request(data: SupportRequestIn, s: Session = Depends(db)):
     reference = "REC-" + "".join(secrets.choice(string.digits) for _ in range(8))
     try:
@@ -307,7 +341,7 @@ async def create_geniuspay_checkout(order_number: str, amount: Decimal, phone: s
     return reference, checkout_url
 
 
-@app.post("/api/orders", status_code=201)
+@app.post("/api/orders", status_code=201, dependencies=[Depends(rate_limit("orders", 10, 600))])
 async def create_order(data: OrderIn, s: Session = Depends(db)):
     try:
         zone = s.execute(
@@ -319,15 +353,20 @@ async def create_order(data: OrderIn, s: Session = Depends(db)):
 
         subtotal = Decimal("0")
         lines = []
+        quantities: dict[UUID, int] = {}
         for item in data.items:
+            quantities[item.variant_id] = quantities.get(item.variant_id, 0) + item.quantity
+            if quantities[item.variant_id] > 50:
+                raise HTTPException(400, "La quantité maximale est de 50 unités par format.")
+        for variant_id, quantity in quantities.items():
             variant = s.execute(
                 text("SELECT id,price,stock_quantity FROM product_variants WHERE id=:id FOR UPDATE"),
-                {"id": item.variant_id},
+                {"id": variant_id},
             ).mappings().first()
-            if not variant or variant["stock_quantity"] < item.quantity:
+            if not variant or variant["stock_quantity"] < quantity:
                 raise HTTPException(409, "Stock insuffisant pour un article")
-            subtotal += variant["price"] * item.quantity
-            lines.append((variant, item.quantity))
+            subtotal += variant["price"] * quantity
+            lines.append((variant, quantity))
 
         fee = zone["fee"]
         total = subtotal + fee
@@ -384,7 +423,7 @@ async def create_order(data: OrderIn, s: Session = Depends(db)):
         raise
 
 
-@app.get("/api/orders/{order_number}/payment-status")
+@app.get("/api/orders/{order_number}/payment-status", dependencies=[Depends(rate_limit("payment-status", 30, 300))])
 async def get_payment_status(order_number: str, token: str = Query(min_length=20, max_length=100), s: Session = Depends(db)):
     order = s.execute(text("SELECT id,total_amount,payment_status,payment_reference,payment_status_token_hash FROM orders WHERE order_number=:n AND payment_provider='geniuspay' FOR UPDATE"), {"n": order_number}).mappings().first()
     if not order or not order["payment_status_token_hash"]:
