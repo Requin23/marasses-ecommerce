@@ -28,7 +28,7 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(28,25,23,0.12)] backdrop-blur sm:px-6 sm:py-4">
+    <div v-if="visible" class="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(28,25,23,0.12)] backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 sm:px-6 sm:py-4">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-3">
         <button class="min-w-0 text-left" :aria-expanded="isOpen" @click="isOpen = true">
           <span class="block truncate text-sm font-semibold sm:text-base">Voir mon panier · {{ cart.count }} article{{ cart.count > 1 ? 's' : '' }}</span>
