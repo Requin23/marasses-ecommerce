@@ -16,6 +16,7 @@ const imageSources: Record<string, string> = {
   'kit-secret-perles-cadenas': '/images/products/kit-secret-perles.jpg',
   'parfum-argent-lot-3': '/images/products/parfum-argent-lot-3.jpg',
   'parfum-intimite': '/images/products/parfum-excitant-maxman.jpg',
+  'koundjajo': '/images/products/koundjajo.jpg',
   'manar-fraise': '/images/products/lubrifiant-fraise.jpg',
   'manar-menthe': '/images/products/gel-menthe.jpg',
   'manar-chocolat': '/images/products/manar-chocolat.jpg',
@@ -56,7 +57,7 @@ const themes: Record<string, string> = {
   'jouet-intime-kiki': 'jeu', 'vibro-rouge-a-levres': 'jeu', 'smart-scalp-massager': 'soin',
   'appareil-massage': 'soin', 'jouet-langue': 'jeu', 'oeuf-intime': 'jeu',
   'mousse-massage-vibrant-kiss': 'soin', 'manar-fraise': 'soin', 'manar-menthe': 'soin',
-  'manar-chocolat': 'soin', 'kit-torture': 'jeu',
+  'manar-chocolat': 'soin', 'koundjajo': 'nature', 'kit-torture': 'jeu',
   'kit-secret-perles-cadenas': 'nature', 'parfum-argent-lot-3': 'nature', 'parfum-intimite': 'soin',
 }
 const theme = computed(() => themes[props.slug] || 'soin')

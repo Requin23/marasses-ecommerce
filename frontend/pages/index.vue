@@ -9,11 +9,11 @@ const searchQuery = ref('')
 const groups = [
   {
     id: 'lui', title: 'Pour lui', subtitle: 'Protection et essentiels du quotidien.',
-    slugs: ['preservatifs-classiques', 'preservatifs-ultra-fins', 'spray-retardateur-homme', 'jouet-intime-kiki', 'oeuf-intime'],
+    slugs: ['preservatifs-classiques', 'preservatifs-ultra-fins', 'spray-retardateur-homme', 'oeuf-intime', 'koundjajo'],
   },
   {
     id: 'elle', title: 'Pour elle', subtitle: 'Soins et traditions de bien-être féminin.',
-    slugs: ['gowe-encens-superieur', 'gel-intime-tonifiant', 'kayanmata-miel-herbes', 'perles-taille-baya', 'gel-mami-lot-3', 'vibro-rouge-a-levres', 'jouet-langue', 'kit-secret-perles-cadenas'],
+    slugs: ['gowe-encens-superieur', 'gel-intime-tonifiant', 'kayanmata-miel-herbes', 'perles-taille-baya', 'gel-mami-lot-3', 'vibro-rouge-a-levres', 'jouet-langue', 'jouet-intime-kiki', 'kit-secret-perles-cadenas'],
   },
   {
     id: 'deux', title: 'À partager à deux', subtitle: 'Jeux, moments complices et coffrets pour le couple.',

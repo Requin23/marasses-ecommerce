@@ -12,6 +12,7 @@ FROM (VALUES
   ('Protection & Santé Intime', 'Produit Manar aromatisé — Menthe', 'manar-menthe', 'Produit aromatisé pour adultes. Vérifier l’usage et les précautions indiqués sur l’emballage.'),
   ('Protection & Santé Intime', 'Produit Manar aromatisé — Chocolat', 'manar-chocolat', 'Produit aromatisé pour adultes. Vérifier l’usage et les précautions indiqués sur l’emballage.'),
   ('Protection & Santé Intime', 'Spray retardateur pour homme', 'spray-retardateur-homme', 'Spray à usage externe. Lire et suivre les précautions indiquées sur l’emballage.'),
+  ('Sensualité, Jeux & Accessoires', 'Remède traditionnel Koundjajo pour homme', 'koundjajo', 'Remède traditionnel à base de plantes. Consulter l’étiquetage pour la composition, l’usage et les précautions.'),
   ('Sensualité, Jeux & Accessoires', 'Jouet intime Kiki', 'jouet-intime-kiki', 'Accessoire intime pour adulte. Nettoyer selon les indications du fabricant.'),
   ('Sensualité, Jeux & Accessoires', 'Vibro en forme de rouge à lèvres', 'vibro-rouge-a-levres', 'Accessoire intime pour adulte. Nettoyer selon les indications du fabricant.'),
   ('Sensualité, Jeux & Accessoires', 'Smart Scalp Massager', 'smart-scalp-massager', 'Masseur du cuir chevelu. Suivre le mode d’emploi du fabricant.'),
@@ -36,6 +37,7 @@ ON CONFLICT (slug) DO UPDATE SET
 -- temporaire « menthe-manar » sans supprimer son historique de commandes.
 UPDATE products SET is_active = false WHERE slug = 'menthe-manar';
 
+
 INSERT INTO product_variants (product_id, sku, variant_name, price, stock_quantity)
 SELECT p.id, v.sku, v.variant_name, v.price, 30
 FROM (VALUES
@@ -45,6 +47,7 @@ FROM (VALUES
   ('manar-menthe', 'MAR-MANAR-MENTHE', 'Unité · Menthe', 2500),
   ('manar-chocolat', 'MAR-MANAR-CHOCOLAT', 'Unité · Chocolat', 2500),
   ('spray-retardateur-homme', 'MAR-SPRAY-RETARD-45', 'Unité', 1000),
+  ('koundjajo', 'MAR-KOUNDJAJO', 'Bouteille', 7000),
   ('jouet-intime-kiki', 'MAR-JOUET-KIKI', 'Unité', 25000),
   ('vibro-rouge-a-levres', 'MAR-VIBRO-ROUGE', 'Unité', 2500),
   ('smart-scalp-massager', 'MAR-SCALP-MASSAGER', 'Unité', 6000),
