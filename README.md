@@ -16,6 +16,16 @@ Le schéma est dans `database/schema.sql` et les catégories, produits, variante
 
 Après avoir configuré `DATABASE_URL`, démarrez avec `docker compose up --build`. La route `/api/health` doit répondre `{"status":"ok","database":"connected"}`. Ensuite, ouvrez le site pour vérifier les produits et la page checkout. Une commande de test crée une vraie commande et décrémente le stock : faites-la seulement avec des données de test.
 
+### Tests et capacité à gérer plusieurs visiteurs
+
+Les tests unitaires vérifient les validations de commande, le partage facultatif de la position, les réclamations et la limite anti-abus quand plusieurs requêtes arrivent simultanément. Depuis PowerShell, dans le dossier du projet, lancez `cd backend`, puis `python -m unittest discover -s tests -v`.
+
+Pour simuler des visiteurs qui consultent le catalogue en même temps, installez Locust (`python -m pip install locust`), puis lancez depuis le dossier `backend` : `locust -f load/locustfile.py --host https://ADRESSE-DE-STAGING`. Ouvrez l’adresse locale affichée par Locust, commencez avec 10 utilisateurs et une montée de 2 utilisateurs par seconde, puis augmentez progressivement. Le scénario ne fait que lire le catalogue, les zones et l’état de l’API; il ne crée pas de commandes et ne touche pas au stock. N’exécutez pas un test de charge sur la boutique publique ou sur une base de production sans autorisation et préparation.
+
+Ces tests constituent un premier contrôle, pas une garantie de capacité. Le limiteur anti-abus actuel conserve son état dans la mémoire de chaque instance; avec plusieurs instances API, il faudra le déplacer vers un service partagé. Les tests de concurrence de commandes et de stock doivent ensuite être exécutés sur une base PostgreSQL de test, jamais sur la base de production.
+
+Pour tester en toute sécurité les commandes simultanées, démarrez Docker Desktop puis, depuis le dossier `backend`, créez une base jetable locale : `docker run --name marasses-pg-test -e POSTGRES_DB=marasses_test -e POSTGRES_USER=marasses_test -e POSTGRES_PASSWORD=marasses_test -p 55432:5432 -d postgres:16-alpine`. Une fois le conteneur prêt, définissez `$env:TEST_DATABASE_URL = 'postgresql+psycopg://marasses_test:marasses_test@localhost:55432/marasses_test'`, puis exécutez `..\.venv\Scripts\python.exe -m unittest discover -s tests -p 'test_concurrent_orders_postgres.py' -v`. Le test refuse toute base qui n’est pas locale et nommée `marasses_test`; il recrée son schéma, donc n’y mettez aucune donnée utile. À la fin, supprimez uniquement ce conteneur de test avec `docker rm -f marasses-pg-test`.
+
 
 ### Paiement GeniusPay (mode Sandbox)
 

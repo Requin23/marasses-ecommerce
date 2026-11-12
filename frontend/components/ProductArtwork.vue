@@ -2,6 +2,23 @@
 const props = defineProps<{ slug: string; name: string }>()
 const imageFailed = ref(false)
 const imageSources: Record<string, string> = {
+  'vibrant-kiss-menthe': '/images/products/vibrant-kiss-menthe.jpg',
+  'spray-retardateur-homme': '/images/products/spray-retardateur.jpg',
+  'gel-mami-lot-3': '/images/products/gel-mami-lot-3.jpg',
+  'jouet-intime-kiki': '/images/products/jouet-kiki.jpg',
+  'vibro-rouge-a-levres': '/images/products/vibro-rouge-a-levres.jpg',
+  'smart-scalp-massager': '/images/products/smart-scalp-massager.jpg',
+  'appareil-massage': '/images/products/appareil-massage-multi-embouts.jpg',
+  'jouet-langue': '/images/products/jouet-langue.jpg',
+  'oeuf-intime': '/images/products/oeuf-stimulant.jpg',
+  'mousse-massage-vibrant-kiss': '/images/products/mousse-massage-vibrant-kiss.jpg',
+  'kit-torture': '/images/products/kit-torture.jpg',
+  'kit-secret-perles-cadenas': '/images/products/kit-secret-perles.jpg',
+  'parfum-argent-lot-3': '/images/products/parfum-argent-lot-3.jpg',
+  'parfum-intimite': '/images/products/parfum-excitant-maxman.jpg',
+  'manar-fraise': '/images/products/lubrifiant-fraise.jpg',
+  'manar-menthe': '/images/products/gel-menthe.jpg',
+  'manar-chocolat': '/images/products/manar-chocolat.jpg',
   'preservatifs-classiques': 'https://www.manixshop.fr/cdn/shop/files/manix-natural-manixshopfr-1728030.jpg?v=1754986894',
   'preservatifs-ultra-fins': 'https://www.pharmaforce.fr/resize/1200x1200/media/finish/img/normal/15/3059944118873-durex-nude-xl-ultra-fins-10-preservatifs-sensation-peau-contre-peau.jpg',
   'gel-lubrifiant-aromatise': 'https://cdn.shop-apotheke.com/images/F00/374/810/F00374810-p5.jpg',
@@ -35,6 +52,12 @@ const themes: Record<string, string> = {
   'jeu-cartes-defis-coquin': 'jeu', 'des-coquins-phosphorescents': 'jeu',
   'perles-taille-baya': 'nature', 'pack-decouverte-securite': 'pack',
   'pack-secrets-seduction': 'pack', 'pack-soiree-couple': 'pack', 'pack-soiree-pimentee': 'pack',
+  'vibrant-kiss-menthe': 'soin', 'spray-retardateur-homme': 'protection', 'gel-mami-lot-3': 'soin',
+  'jouet-intime-kiki': 'jeu', 'vibro-rouge-a-levres': 'jeu', 'smart-scalp-massager': 'soin',
+  'appareil-massage': 'soin', 'jouet-langue': 'jeu', 'oeuf-intime': 'jeu',
+  'mousse-massage-vibrant-kiss': 'soin', 'manar-fraise': 'soin', 'manar-menthe': 'soin',
+  'manar-chocolat': 'soin', 'kit-torture': 'jeu',
+  'kit-secret-perles-cadenas': 'nature', 'parfum-argent-lot-3': 'nature', 'parfum-intimite': 'soin',
 }
 const theme = computed(() => themes[props.slug] || 'soin')
 const colors = computed(() => palettes[theme.value]!)
@@ -47,8 +70,8 @@ const isOil = computed(() => props.slug === 'huile-massage-gourmande')
 </script>
 
 <template>
-  <div class="relative flex h-48 items-center justify-center overflow-hidden rounded-xl" :style="{ backgroundColor: colors.bg }" role="img" :aria-label="`Illustration du produit ${name}`">
-    <img v-if="imageSource && !imageFailed" :src="imageSource" :alt="`Photo de ${name}`" referrerpolicy="no-referrer" class="h-full w-full object-contain p-2" @error="imageFailed = true" />
+  <div class="relative flex h-48 items-center justify-center overflow-hidden rounded-xl" :style="{ backgroundColor: colors.bg }" role="img" :aria-label="`${imageSource && !imageFailed ? 'Photo' : 'Illustration'} du produit ${name}`">
+    <img v-if="imageSource && !imageFailed" :src="imageSource" :alt="`Photo de ${name}`" loading="lazy" decoding="async" referrerpolicy="no-referrer" class="h-full w-full object-contain p-2" @error="imageFailed = true" />
     <svg v-else viewBox="0 0 320 190" class="h-full w-full" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
       <circle cx="160" cy="95" r="70" :fill="colors.accent" opacity=".28" />
       <circle cx="75" cy="40" r="18" :fill="colors.accent" opacity=".35" />
@@ -102,6 +125,6 @@ const isOil = computed(() => props.slug === 'huile-massage-gourmande')
       </g>
       <path d="M145 165h30" :stroke="colors.ink" stroke-width="3" stroke-linecap="round" opacity=".4" />
     </svg>
-    <span class="absolute bottom-3 left-3 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-stone-600">Visuel illustratif</span>
+    <span class="absolute bottom-3 left-3 rounded-full bg-white/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-stone-700">{{ imageSource && !imageFailed ? 'Photo du produit' : 'Visuel illustratif' }}</span>
   </div>
 </template>

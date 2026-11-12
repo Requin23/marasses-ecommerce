@@ -12,14 +12,8 @@ const error = ref('')
 const confirmation = ref('')
 const whatsappNumber = String(config.public.whatsappSupportNumber || '').replace(/\D/g, '')
 const whatsappUrl = computed(() => {
-  if (!whatsappNumber || !phone.value.trim() || !message.value.trim()) return ''
-  const text = [
-    'Bonjour Marasses, j’ai besoin d’aide.',
-    orderNumber.value.trim() ? `Référence de commande : ${orderNumber.value.trim()}` : '',
-    `Sujet : ${topic.value}`,
-    `Mon téléphone : ${phone.value.trim()}`,
-    message.value.trim(),
-  ].filter(Boolean).join('\n')
+  if (!whatsappNumber) return ''
+  const text = 'Bonjour Marasses, j’ai besoin d’aide. Pouvez-vous me répondre en privé ?'
   return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(text)}`
 })
 
@@ -56,16 +50,25 @@ async function submitRequest() {
 
 <template>
   <div class="mx-auto max-w-2xl">
-    <NuxtLink to="/" class="text-sm text-rose-800">← Retour à la boutique</NuxtLink>
-    <h1 class="my-5 text-3xl font-bold">Aide et réclamations</h1>
-    <p class="mb-6 text-stone-600">Décrivez votre problème. Nous enregistrerons votre demande pour pouvoir la traiter. Vous pouvez aussi nous écrire sur WhatsApp si cette option est configurée.</p>
+    <NuxtLink to="/" class="inline-flex min-h-10 items-center text-sm font-medium text-rose-800 hover:underline">← Retour à la boutique</NuxtLink>
+    <p class="mt-4 text-xs font-semibold uppercase tracking-wider text-rose-800">Marasses · Assistance</p>
+    <h1 class="mt-1 text-3xl font-bold">Comment pouvons-nous vous aider ?</h1>
+    <p class="mt-2 text-sm leading-6 text-stone-600">Contactez-nous sur WhatsApp ou envoyez une réclamation. Votre demande sera traitée avec discrétion.</p>
+
+    <a v-if="whatsappUrl" :href="whatsappUrl" target="_blank" rel="noopener noreferrer" class="mt-5 flex min-h-12 items-center justify-center rounded-xl bg-emerald-700 px-4 py-3 text-center font-semibold text-white hover:bg-emerald-800">
+      Écrire sur WhatsApp
+    </a>
 
     <div v-if="confirmation" role="status" class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
       <p class="font-semibold">Votre demande a été envoyée.</p>
       <p class="mt-1 text-sm">Conservez cette référence : <strong>{{ confirmation }}</strong></p>
     </div>
 
-    <form class="space-y-4 rounded-2xl border bg-white p-5" @submit.prevent="submitRequest">
+    <form class="mt-6 space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6" @submit.prevent="submitRequest">
+      <div>
+        <h2 class="font-bold">Envoyer une réclamation</h2>
+        <p class="mt-1 text-sm text-stone-600">Nous vous répondrons au numéro indiqué.</p>
+      </div>
       <label class="block text-sm font-medium">
         Sujet
         <select v-model="topic" class="mt-1 w-full rounded-xl border p-3">
@@ -101,9 +104,6 @@ async function submitRequest() {
         {{ busy ? 'Envoi…' : 'Envoyer ma réclamation' }}
       </button>
 
-      <a v-if="whatsappUrl" :href="whatsappUrl" target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-emerald-700 p-3 text-center font-semibold text-emerald-800 hover:bg-emerald-50">
-        Continuer sur WhatsApp
-      </a>
     </form>
   </div>
 </template>
