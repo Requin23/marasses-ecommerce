@@ -21,6 +21,21 @@ const selectedZone = computed(() => zones.value?.find(item => item.id === zone.v
 const delivery = computed(() => cart.lines.length ? (selectedZone.value?.fee || 0) : 0)
 const total = computed(() => cart.subtotal + Number(delivery.value))
 const money = (amount: number) => new Intl.NumberFormat('fr-FR').format(Number(amount || 0))
+const whatsappOrderUrl = computed(() => {
+  if (!result.value || result.value.payment_url) return ''
+  const items = confirmedLines.value
+    .map(line => `${line.productName} · ${line.variant.name} × ${line.quantity}`)
+    .join(', ')
+  const message = [
+    `Bonjour Marasses, je confirme ma commande ${result.value.order_number}.`,
+    `Nom : ${alias.value || 'Client'}`,
+    `Téléphone : ${phone.value}`,
+    `Articles : ${items}`,
+    `Total : ${money(result.value.total)} FCFA`,
+    `Adresse de livraison : ${address.value}`,
+  ].join('\n')
+  return `https://wa.me/22671062285?text=${encodeURIComponent(message)}`
+})
 const locationMapUrl = computed(() => {
   if (!location.value) return ''
   const { latitude, longitude } = location.value
@@ -123,7 +138,31 @@ async function submit() {
           <h2 class="mt-2 text-2xl font-bold">Merci pour votre commande</h2>
           <p class="mt-3">Votre référence est <strong>{{ result.order_number }}</strong>.</p>
           <p class="mt-1">Montant total : <strong>{{ money(result.total) }} FCFA</strong></p>
-          <p class="mt-3 text-sm">Gardez cette référence pour toute question au sujet de votre commande.</p>
+          <div class="mt-4 rounded-xl border border-emerald-200/80 bg-white/70 p-4 text-sm dark:border-emerald-900 dark:bg-slate-900/50">
+            <h3 class="font-semibold">Détails de votre commande</h3>
+            <ul class="mt-2 space-y-1.5">
+              <li v-for="line in confirmedLines" :key="line.variant.id" class="flex justify-between gap-3">
+                <span>{{ line.productName }} · {{ line.variant.name }} × {{ line.quantity }}</span>
+                <span class="shrink-0">{{ money(line.variant.price * line.quantity) }} F</span>
+              </li>
+            </ul>
+            <div class="mt-3 space-y-1 border-t border-emerald-200 pt-3 dark:border-emerald-900">
+              <p class="flex justify-between gap-3"><span>Sous-total</span><span>{{ money(result.subtotal) }} F</span></p>
+              <p class="flex justify-between gap-3"><span>Livraison · {{ selectedZone?.name || 'Zone choisie' }}</span><span>{{ money(result.delivery_fee) }} F</span></p>
+              <p class="flex justify-between gap-3 font-bold"><span>Total</span><span>{{ money(result.total) }} FCFA</span></p>
+            </div>
+            <p class="mt-3 text-xs">Livraison prévue à : {{ address }}</p>
+          </div>
+          <p class="mt-3 text-sm">Garde cette référence pour toute question au sujet de ta commande. Cette confirmation est affichée sur cet appareil.</p>
+          <a
+            v-if="whatsappOrderUrl"
+            :href="whatsappOrderUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-center font-semibold text-white shadow-sm transition hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          >
+            Confirmer par WhatsApp
+          </a>
           <NuxtLink to="/" class="mt-5 inline-flex min-h-11 items-center rounded-xl bg-emerald-800 px-4 py-2.5 font-semibold text-white hover:bg-emerald-900">Retourner à la boutique</NuxtLink>
         </div>
 

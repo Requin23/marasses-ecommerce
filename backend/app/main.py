@@ -13,7 +13,7 @@ from urllib.parse import urlencode, urlparse
 from uuid import UUID
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import create_engine, text
@@ -69,6 +69,27 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 GENIUSPAY_API = "https://geniuspay.ci/api/v1/merchant"
+
+
+def telegram_is_configured() -> bool:
+    return bool(os.getenv("TELEGRAM_BOT_TOKEN", "").strip() and os.getenv("TELEGRAM_CHAT_ID", "").strip())
+
+
+async def send_telegram_message(body: str) -> bool:
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(url, json={"chat_id": chat_id, "text": body[:4000]})
+        if response.is_success and response.json().get("ok") is True:
+            return True
+        print(f"Telegram rejected an order notification (HTTP {response.status_code}).")
+    except Exception as exc:
+        print(f"Telegram notification could not be delivered ({type(exc).__name__}).")
+    return False
 
 
 def db():
@@ -195,7 +216,7 @@ def admin_update_order(order_id: UUID, data: AdminOrderUpdate, s: Session = Depe
 def health(s: Session = Depends(db)):
     try:
         s.execute(text("SELECT 1"))
-        return {"status": "ok", "database": "connected", "geniuspay_configured": bool(os.getenv("GENIUSPAY_API_KEY") and os.getenv("GENIUSPAY_API_SECRET")), "geniuspay_environment": os.getenv("GENIUSPAY_ENVIRONMENT", "sandbox")}
+        return {"status": "ok", "database": "connected", "geniuspay_configured": bool(os.getenv("GENIUSPAY_API_KEY") and os.getenv("GENIUSPAY_API_SECRET")), "geniuspay_environment": os.getenv("GENIUSPAY_ENVIRONMENT", "sandbox"), "telegram_configured": telegram_is_configured()}
     except Exception:
         raise HTTPException(503, "Base de données indisponible")
 
@@ -349,7 +370,7 @@ async def create_geniuspay_checkout(order_number: str, amount: Decimal, phone: s
 
 
 @app.post("/api/orders", status_code=201, dependencies=[Depends(rate_limit("orders", 10, 600))])
-async def create_order(data: OrderIn, s: Session = Depends(db)):
+async def create_order(data: OrderIn, background_tasks: BackgroundTasks, s: Session = Depends(db)):
     try:
         zone = s.execute(
             text("SELECT id,fee FROM delivery_zones WHERE id=:id AND is_active FOR SHARE"),
@@ -367,7 +388,9 @@ async def create_order(data: OrderIn, s: Session = Depends(db)):
                 raise HTTPException(400, "La quantité maximale est de 50 unités par format.")
         for variant_id, quantity in quantities.items():
             variant = s.execute(
-                text("SELECT id,price,stock_quantity FROM product_variants WHERE id=:id FOR UPDATE"),
+                text("""SELECT pv.id,pv.price,pv.stock_quantity,pv.variant_name,p.name AS product_name
+                    FROM product_variants pv JOIN products p ON p.id=pv.product_id
+                    WHERE pv.id=:id FOR UPDATE OF pv"""),
                 {"id": variant_id},
             ).mappings().first()
             if not variant or variant["stock_quantity"] < quantity:
@@ -414,6 +437,20 @@ async def create_order(data: OrderIn, s: Session = Depends(db)):
                 "q": quantity, "v": variant["id"],
             })
         s.commit()
+        item_summary = ", ".join(
+            f"{variant['product_name']} ({variant['variant_name']}) x{quantity}"
+            for variant, quantity in lines
+        )
+        admin_message = (
+            f"Nouvelle commande Marasses {order_number}\n"
+            f"Client : {data.customer_alias or 'Client'} · {data.customer_phone}\n"
+            f"Adresse : {data.delivery_address}\nArticles : {item_summary}\n"
+            f"Sous-total : {subtotal} FCFA · Livraison : {fee} FCFA\n"
+            f"Total : {total} FCFA · Paiement : {data.payment_method} ({order_status})"
+        )
+        if data.delivery_latitude is not None and data.delivery_longitude is not None:
+            admin_message += f"\nCarte : https://www.openstreetmap.org/?mlat={data.delivery_latitude}&mlon={data.delivery_longitude}#map=17/{data.delivery_latitude}/{data.delivery_longitude}"
+        background_tasks.add_task(send_telegram_message, admin_message)
         result = {
             "order_number": order_number, "subtotal": float(subtotal), "delivery_fee": float(fee),
             "total": float(total), "status": order_status,

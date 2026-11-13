@@ -14,6 +14,23 @@ const supportError = ref('')
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
+const newOrderNotice = ref<any | null>(null)
+const notificationsEnabled = ref(false)
+const browserNotificationsSupported = ref(false)
+let dashboardPoll: ReturnType<typeof setInterval> | undefined
+let hasLoadedOrders = false
+
+async function enableOrderNotifications() {
+  if (!import.meta.client || !('Notification' in window)) {
+    notice.value = 'Les notifications du navigateur ne sont pas disponibles.'
+    return
+  }
+  const permission = await Notification.requestPermission()
+  notificationsEnabled.value = permission === 'granted'
+  notice.value = notificationsEnabled.value
+    ? 'Notifications de nouvelles commandes activées sur cet appareil.'
+    : 'Autorise les notifications dans les paramètres du navigateur pour les recevoir.'
+}
 
 function api(path: string, options: Record<string, any> = {}) {
   return $fetch(`${config.public.apiBase}${path}`, {
@@ -31,7 +48,22 @@ async function loadDashboard() {
     ])
     if (orderResult.status === 'rejected') throw orderResult.reason
     if (productResult.status === 'rejected') throw productResult.reason
-    orders.value = orderResult.value as any[]
+    const nextOrders = orderResult.value as any[]
+    if (hasLoadedOrders) {
+      const previousIds = new Set(orders.value.map(order => order.id))
+      const newOrders = nextOrders.filter(order => !previousIds.has(order.id))
+      if (newOrders.length) {
+        const latest = newOrders[0]
+        newOrderNotice.value = latest
+        if (notificationsEnabled.value && 'Notification' in window) {
+          new Notification('Nouvelle commande Marasses', {
+            body: `${latest.order_number} · ${money(latest.total_amount)} FCFA`,
+          })
+        }
+      }
+    }
+    orders.value = nextOrders
+    hasLoadedOrders = true
     products.value = productResult.value as any[]
     if (supportResult.status === 'fulfilled') {
       supportRequests.value = supportResult.value as any[]
@@ -59,6 +91,11 @@ async function signIn() {
     if (import.meta.client) sessionStorage.setItem('marasses-admin-token', result.token)
     password.value = ''
     await loadDashboard()
+    if (!dashboardPoll) {
+      dashboardPoll = setInterval(() => {
+        if (!busy.value && token.value) void loadDashboard()
+      }, 30_000)
+    }
   } catch (cause: any) {
     error.value = cause?.data?.detail || 'Connexion impossible. Vérifie le mot de passe administrateur.'
   } finally {
@@ -71,6 +108,10 @@ function signOut() {
   orders.value = []
   products.value = []
   supportRequests.value = []
+  newOrderNotice.value = null
+  hasLoadedOrders = false
+  if (dashboardPoll) clearInterval(dashboardPoll)
+  dashboardPoll = undefined
   if (import.meta.client) sessionStorage.removeItem('marasses-admin-token')
 }
 
@@ -101,11 +142,20 @@ async function updateVariant(variant: any) {
 }
 
 onMounted(() => {
+  browserNotificationsSupported.value = 'Notification' in window
+  notificationsEnabled.value = import.meta.client && 'Notification' in window && Notification.permission === 'granted'
   const savedToken = sessionStorage.getItem('marasses-admin-token')
   if (savedToken) {
     token.value = savedToken
     void loadDashboard()
+    dashboardPoll = setInterval(() => {
+      if (!busy.value && token.value) void loadDashboard()
+    }, 30_000)
   }
+})
+
+onBeforeUnmount(() => {
+  if (dashboardPoll) clearInterval(dashboardPoll)
 })
 
 const money = (value: number) => new Intl.NumberFormat('fr-FR').format(Number(value || 0))
@@ -159,6 +209,10 @@ const filteredSupportRequests = computed(() => {
 
     <div v-if="error" role="alert" class="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{{ error }}</div>
     <div v-if="notice" role="status" class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{{ notice }}</div>
+    <div v-if="newOrderNotice && token" role="status" class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950">
+      <span><strong>Nouvelle commande :</strong> {{ newOrderNotice.order_number }} · {{ money(newOrderNotice.total_amount) }} FCFA. Les détails sont dans la liste des commandes.</span>
+      <button type="button" class="rounded-lg border border-rose-300 bg-white px-3 py-2 font-semibold" @click="activeTab = 'orders'; searchQuery = newOrderNotice.order_number; newOrderNotice = null">Voir la commande</button>
+    </div>
 
     <form v-if="!token" class="mx-auto max-w-md rounded-2xl border bg-white p-6 shadow-sm sm:p-8" @submit.prevent="signIn">
       <h2 class="text-xl font-semibold">Connexion réservée</h2>
@@ -174,6 +228,12 @@ const filteredSupportRequests = computed(() => {
         <article class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm"><p class="text-sm text-stone-500">En préparation</p><p class="mt-2 text-3xl font-bold text-blue-700">{{ preparingOrders }}</p><p class="mt-1 text-xs text-stone-500">commandes à emballer</p></article>
         <article class="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm"><p class="text-sm text-stone-500">Livrées</p><p class="mt-2 text-3xl font-bold text-emerald-700">{{ deliveredOrders }}</p><p class="mt-1 text-xs text-stone-500">sur les 100 dernières</p></article>
         <article class="rounded-2xl border border-rose-100 bg-white p-4 shadow-sm"><p class="text-sm text-stone-500">Stocks faibles</p><p class="mt-2 text-3xl font-bold text-rose-800">{{ lowStockCount }}</p><p class="mt-1 text-xs text-stone-500">formats à 5 unités ou moins</p></article>
+      </div>
+
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white p-4 text-sm shadow-sm">
+        <span>Le tableau vérifie automatiquement les nouvelles commandes toutes les 30 secondes.</span>
+        <button v-if="browserNotificationsSupported && !notificationsEnabled" type="button" class="rounded-lg border border-stone-300 px-3 py-2 font-semibold hover:bg-stone-50" @click="enableOrderNotifications">Activer les notifications du navigateur</button>
+        <span v-else-if="notificationsEnabled" class="font-medium text-emerald-700">Notifications activées</span>
       </div>
 
       <div class="mb-5 flex flex-col gap-3 rounded-2xl border bg-white p-3 shadow-sm sm:flex-row sm:items-center">
