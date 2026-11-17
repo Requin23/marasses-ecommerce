@@ -3,6 +3,8 @@ const config = useRuntimeConfig()
 const apiBase = import.meta.server ? config.apiInternalBase : config.public.apiBase
 const { data: products, error } = await useFetch<any[]>(`${apiBase}/products`, { key: 'catalog-products' })
 const cart = useCartStore()
+const whatsappNumber = String(config.public.whatsappSupportNumber || '22671062285').replace(/\D/g, '')
+const emergencyContraceptionWhatsApp = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent('Bonjour, je voudrais connaître la disponibilité en pharmacie des options de contraception d’urgence présentées sur votre site.')}`
 const selectedGroup = ref('all')
 const searchQuery = ref('')
 
@@ -106,13 +108,26 @@ const visibleProductCount = computed(() => visibleGroups.value.reduce((sum, grou
   <p v-else class="rounded-xl bg-white p-4 text-stone-600">Le catalogue sera bientôt disponible.</p>
 
   <section aria-labelledby="emergency-contraception-title" class="mb-10 rounded-3xl border border-rose-200 bg-rose-50 p-6 dark:border-slate-700 dark:bg-slate-900 md:p-8">
-    <p class="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">Rubrique en préparation</p>
+    <p class="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">Disponibilité à confirmer</p>
     <h2 id="emergency-contraception-title" class="mt-2 text-xl font-bold text-stone-900 dark:text-slate-100 sm:text-2xl">Contraception d’urgence</h2>
     <p class="mt-2 max-w-2xl text-sm leading-6 text-stone-700 dark:text-slate-300">
-      Les produits, prix et disponibilités seront ajoutés après confirmation des informations auprès du fournisseur.
+      Deux options annoncées, selon le délai indiqué sur leur notice :
     </p>
-    <p class="mt-3 max-w-2xl text-xs leading-5 text-stone-600 dark:text-slate-400">
-      Pour un besoin immédiat, adressez-vous directement à une pharmacie ou à un professionnel de santé.
+    <div class="mt-5 grid gap-3 sm:grid-cols-2">
+      <article class="rounded-2xl border border-rose-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+        <h3 class="font-semibold text-stone-900 dark:text-slate-100">Pilule du lendemain · jusqu’à 3 jours</h3>
+        <p class="mt-2 text-lg font-bold text-rose-900 dark:text-rose-300">10 000 FCFA</p>
+      </article>
+      <article class="rounded-2xl border border-rose-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+        <h3 class="font-semibold text-stone-900 dark:text-slate-100">Contraception d’urgence · jusqu’à 5 jours</h3>
+        <p class="mt-2 text-lg font-bold text-rose-900 dark:text-rose-300">15 000 FCFA</p>
+      </article>
+    </div>
+    <p class="mt-4 max-w-2xl text-xs leading-5 text-stone-600 dark:text-slate-400">
+      À prendre le plus tôt possible. Le délai et le mode d’emploi dépendent du médicament : vérifiez la notice et demandez conseil à un pharmacien ou à un professionnel de santé. Cette rubrique est informative et ne permet pas encore de commander ces produits en ligne.
     </p>
+    <a :href="emergencyContraceptionWhatsApp" target="_blank" rel="noopener noreferrer" class="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900">
+      Demander la disponibilité sur WhatsApp
+    </a>
   </section>
 </template>
