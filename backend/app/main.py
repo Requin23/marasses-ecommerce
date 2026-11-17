@@ -26,7 +26,14 @@ elif DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL.removeprefix("postgresql://")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-app = FastAPI(title="Marasses API", version="0.2.0")
+is_prod = os.getenv("GENIUSPAY_ENVIRONMENT", "").strip().lower() == "production"
+app = FastAPI(
+    title="Marasses API",
+    version="0.2.0",
+    docs_url=None if is_prod else "/docs",
+    redoc_url=None if is_prod else "/redoc",
+    openapi_url=None if is_prod else "/openapi.json",
+)
 cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -42,7 +49,8 @@ _rate_limit_events: dict[tuple[str, str], list[float]] = {}
 def rate_limit(bucket: str, limit: int, window_seconds: int):
     def check(request: Request):
         now = time.monotonic()
-        ip_address = request.client.host if request.client else "unknown"
+        forwarded_for = request.headers.get("X-Forwarded-For", "")
+        ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else "unknown")
         key = (bucket, ip_address)
         with _rate_limit_lock:
             events = [stamp for stamp in _rate_limit_events.get(key, []) if now - stamp < window_seconds]
@@ -216,7 +224,7 @@ def admin_update_order(order_id: UUID, data: AdminOrderUpdate, s: Session = Depe
 def health(s: Session = Depends(db)):
     try:
         s.execute(text("SELECT 1"))
-        return {"status": "ok", "database": "connected", "geniuspay_configured": bool(os.getenv("GENIUSPAY_API_KEY") and os.getenv("GENIUSPAY_API_SECRET")), "geniuspay_environment": os.getenv("GENIUSPAY_ENVIRONMENT", "sandbox"), "telegram_configured": telegram_is_configured()}
+        return {"status": "ok"}
     except Exception:
         raise HTTPException(503, "Base de données indisponible")
 
@@ -555,15 +563,16 @@ async def geniuspay_webhook(request: Request, s: Session = Depends(db)):
         if Decimal(str(data.get("amount", "0"))) != order["total_amount"] or data.get("currency", "XOF") != "XOF":
             s.rollback()
             raise HTTPException(400, "Montant ou devise du paiement incorrect.")
-        s.execute(text("UPDATE orders SET payment_status='completed',order_status='processing' WHERE id=:id"), {"id": order["id"]})
+        s.execute(text("UPDATE orders SET payment_status='completed',order_status='processing' WHERE id=:id AND payment_status='pending'"), {"id": order["id"]})
     else:
-        items = s.execute(text("SELECT product_variant_id,quantity FROM order_items WHERE order_id=:id"), {"id": order["id"]}).mappings()
-        for item in items:
-            s.execute(text("UPDATE product_variants SET stock_quantity=stock_quantity+:q WHERE id=:id"), {
-                "q": item["quantity"], "id": item["product_variant_id"],
-            })
-        s.execute(text("UPDATE orders SET payment_status=:status,order_status='cancelled' WHERE id=:id"), {
+        updated = s.execute(text("UPDATE orders SET payment_status=:status,order_status='cancelled' WHERE id=:id AND payment_status='pending'"), {
             "status": "failed" if event == "payment.failed" else event.removeprefix("payment."), "id": order["id"],
         })
+        if updated.rowcount == 1:
+            items = s.execute(text("SELECT product_variant_id,quantity FROM order_items WHERE order_id=:id"), {"id": order["id"]}).mappings()
+            for item in items:
+                s.execute(text("UPDATE product_variants SET stock_quantity=stock_quantity+:q WHERE id=:id"), {
+                    "q": item["quantity"], "id": item["product_variant_id"],
+                })
     s.commit()
     return {"received": True}
