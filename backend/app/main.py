@@ -476,7 +476,7 @@ async def create_order(data: OrderIn, background_tasks: BackgroundTasks, s: Sess
 
 
 @app.get("/api/orders/{order_number}/payment-status", dependencies=[Depends(rate_limit("payment-status", 30, 300))])
-async def get_payment_status(order_number: str, token: str = Query(min_length=20, max_length=100), s: Session = Depends(db)):
+async def get_payment_status(order_number: str, background_tasks: BackgroundTasks, token: str = Query(min_length=20, max_length=100), s: Session = Depends(db)):
     order = s.execute(text("SELECT id,total_amount,payment_status,payment_reference,payment_status_token_hash FROM orders WHERE order_number=:n AND payment_provider='geniuspay' FOR UPDATE"), {"n": order_number}).mappings().first()
     if not order or not order["payment_status_token_hash"]:
         raise HTTPException(404, "Commande introuvable.")
@@ -503,7 +503,12 @@ async def get_payment_status(order_number: str, token: str = Query(min_length=20
     if status == "completed":
         if Decimal(str(payment.get("amount", "0"))) != order["total_amount"] or payment.get("currency", "XOF") != "XOF":
             raise HTTPException(502, "Montant ou devise GeniusPay incohérent.")
-        s.execute(text("UPDATE orders SET payment_status='completed',order_status='processing' WHERE id=:id AND payment_status IN ('pending','processing')"), {"id": order["id"]})
+        updated = s.execute(text("UPDATE orders SET payment_status='completed',order_status='processing' WHERE id=:id AND payment_status='pending'"), {"id": order["id"]})
+        if updated.rowcount == 1:
+            background_tasks.add_task(
+                send_telegram_message,
+                f"Paiement GeniusPay CONFIRMÉ — {order_number}\nMontant encaissé : {order['total_amount']} FCFA (Ref: {order['payment_reference']})\nLa commande peut être préparée.",
+            )
     elif status in {"failed", "cancelled", "expired"}:
         items = s.execute(text("SELECT product_variant_id,quantity FROM order_items WHERE order_id=:id"), {"id": order["id"]}).mappings()
         for item in items:
@@ -514,7 +519,7 @@ async def get_payment_status(order_number: str, token: str = Query(min_length=20
 
 
 @app.post("/api/webhooks/geniuspay")
-async def geniuspay_webhook(request: Request, s: Session = Depends(db)):
+async def geniuspay_webhook(request: Request, background_tasks: BackgroundTasks, s: Session = Depends(db)):
     webhook_secret = os.getenv("GENIUSPAY_WEBHOOK_SECRET", "").strip()
     if not webhook_secret:
         raise HTTPException(503, "Webhook GeniusPay non configuré.")
@@ -563,7 +568,12 @@ async def geniuspay_webhook(request: Request, s: Session = Depends(db)):
         if Decimal(str(data.get("amount", "0"))) != order["total_amount"] or data.get("currency", "XOF") != "XOF":
             s.rollback()
             raise HTTPException(400, "Montant ou devise du paiement incorrect.")
-        s.execute(text("UPDATE orders SET payment_status='completed',order_status='processing' WHERE id=:id AND payment_status='pending'"), {"id": order["id"]})
+        updated = s.execute(text("UPDATE orders SET payment_status='completed',order_status='processing' WHERE id=:id AND payment_status='pending'"), {"id": order["id"]})
+        if updated.rowcount == 1:
+            background_tasks.add_task(
+                send_telegram_message,
+                f"Paiement GeniusPay CONFIRMÉ — {order_number}\nMontant encaissé : {order['total_amount']} FCFA (Ref: {reference})\nLa commande peut être préparée.",
+            )
     else:
         updated = s.execute(text("UPDATE orders SET payment_status=:status,order_status='cancelled' WHERE id=:id AND payment_status='pending'"), {
             "status": "failed" if event == "payment.failed" else event.removeprefix("payment."), "id": order["id"],
